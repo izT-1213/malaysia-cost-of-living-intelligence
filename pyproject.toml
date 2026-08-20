@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "malaysia-cost-of-living"
+version = "0.1.0"
+description = "Analytics-first Malaysian consumer price intelligence"
+requires-python = ">=3.11"
+dependencies = [
+  "polars>=1.0,<2",
+  "pydantic>=2.0,<3",
+  "python-dotenv>=1.0,<2",
+  "supabase>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "ruff>=0.6,<1"]
+
+[tool.setuptools.packages.find]
+include = ["pipeline*"]
+exclude = ["tests*", "apps*", "analytics*", "data*", "shared*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
