@@ -1,4 +1,4 @@
-const observations = [
+const demoObservations = [
   { state: "Selangor", item: "Eggs", median: 12.4, min: 8.9, max: 16.8 },
   { state: "Johor", item: "Eggs", median: 11.8, min: 9.2, max: 15.5 },
   { state: "Pulau Pinang", item: "Eggs", median: 13.2, min: 10.0, max: 17.1 },
@@ -9,7 +9,9 @@ const observations = [
   { state: "Negeri Sembilan", item: "Eggs", median: 12.1, min: 9.5, max: 15.8 },
 ];
 
-const districts = {
+let observations = [...demoObservations];
+const datasets = { daily: [...demoObservations], monthly: [...demoObservations] };
+let districts = {
   Selangor: ["Petaling", "Gombak", "Klang"], Johor: ["Johor Bahru", "Batu Pahat"],
   "Pulau Pinang": ["Timur Laut", "Seberang Perai Tengah"], Kedah: ["Kota Setar", "Sungai Petani"],
   Perak: ["Kinta", "Manjung"], Sarawak: ["Kuching", "Miri"], Sabah: ["Kota Kinabalu", "Sandakan"],
@@ -18,6 +20,7 @@ const districts = {
 
 const trend = [11.7, 12.1, 12.0, 12.6, 12.3, 12.8, 12.4];
 const money = (value) => `RM ${value.toFixed(2)}`;
+const config = window.PRICE_LENS_CONFIG || {};
 
 const stateFilter = document.querySelector("#state-filter");
 const districtFilter = document.querySelector("#district-filter");
@@ -25,6 +28,10 @@ const itemFilter = document.querySelector("#item-filter");
 const table = document.querySelector("#state-table");
 
 function populateFilters() {
+  [stateFilter, districtFilter, itemFilter].forEach((select) => {
+    const first = select.querySelector("option").cloneNode(true);
+    select.replaceChildren(first);
+  });
   [...new Set(observations.map((row) => row.state))].sort().forEach((state) => {
     stateFilter.insertAdjacentHTML("beforeend", `<option value="${state}">${state}</option>`);
   });
@@ -41,7 +48,8 @@ function selectedRows() {
     const stateMatches = stateFilter.value === "all" || row.state === stateFilter.value;
     const itemMatches = itemFilter.value === "all" || row.item === itemFilter.value;
     const districtMatches = districtFilter.value === "all" || (districts[row.state] || []).includes(districtFilter.value);
-    return stateMatches && itemMatches && districtMatches;
+    const levelMatches = !row.areaLevel || row.areaLevel === (districtFilter.value === "all" ? "state" : "district");
+    return stateMatches && itemMatches && districtMatches && levelMatches;
   });
 }
 
@@ -78,6 +86,14 @@ function renderChart() {
 
 function render() {
   const rows = selectedRows();
+  if (!rows.length) {
+    table.innerHTML = `<tr><td colspan="5">No rows match the current filters.</td></tr>`;
+    document.querySelector("#median-value").textContent = "—";
+    document.querySelector("#min-value").textContent = "—";
+    document.querySelector("#max-value").textContent = "—";
+    document.querySelector("#areas-value").textContent = "0";
+    return;
+  }
   renderMetrics(rows);
   renderTable(rows);
 }
@@ -88,7 +104,11 @@ render();
 stateFilter.addEventListener("change", render);
 districtFilter.addEventListener("change", render);
 itemFilter.addEventListener("change", render);
-document.querySelector("#period-filter").addEventListener("change", render);
+document.querySelector("#period-filter").addEventListener("change", (event) => {
+  observations = datasets[event.target.value] || [...demoObservations];
+  populateFilters();
+  render();
+});
 document.querySelector("#reset-filters").addEventListener("click", () => {
   stateFilter.value = "all";
   districtFilter.value = "all";
@@ -122,3 +142,52 @@ themeToggle.addEventListener("click", () => {
   applyTheme();
 });
 applyTheme();
+
+async function supabaseGet(path) {
+  const response = await fetch(`${config.url}/rest/v1/${path}`, {
+    headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` },
+  });
+  if (!response.ok) throw new Error(`Supabase request failed (${response.status})`);
+  return response.json();
+}
+
+function toRows(rows, itemNames) {
+  return rows.map((row) => ({
+    state: row.state,
+    district: row.district || "",
+    areaLevel: row.area_level,
+    item: itemNames.get(String(row.item_code)) || `Item ${row.item_code}`,
+    itemCode: row.item_code,
+    median: Number(row.median_price),
+    min: Number(row.min_price),
+    max: Number(row.max_price),
+  }));
+}
+
+async function loadSupabaseData() {
+  if (!config.url || !config.anonKey || config.anonKey.startsWith("sb_secret_")) return;
+  const items = await supabaseGet("item_lookup?select=item_code,item&order=item.asc&limit=1000");
+  const itemNames = new Map(items.map((row) => [String(row.item_code), row.item]));
+  const latestDaily = await supabaseGet("daily_item_area_summary?select=metric_date&area_level=eq.state&order=metric_date.desc&limit=1");
+  const latestMonthly = await supabaseGet("monthly_item_area_summary?select=metric_month&area_level=eq.state&order=metric_month.desc&limit=1");
+  if (!latestDaily.length || !latestMonthly.length) return;
+  const dailyDate = latestDaily[0].metric_date;
+  const monthlyDate = latestMonthly[0].metric_month;
+  const daily = await supabaseGet(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=eq.${dailyDate}&order=state.asc,item_code.asc&limit=20000`);
+  const monthly = await supabaseGet(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc&limit=20000`);
+  datasets.daily = toRows(daily, itemNames);
+  datasets.monthly = toRows(monthly, itemNames);
+  observations = datasets[document.querySelector("#period-filter").value];
+  districts = {};
+  [...datasets.daily, ...datasets.monthly].forEach((row) => {
+    if (row.district) districts[row.state] = [...new Set([...(districts[row.state] || []), row.district])];
+  });
+  populateFilters();
+  render();
+  const banner = document.querySelector(".demo-banner span:last-child");
+  banner.textContent = `Connected to Supabase · daily ${dailyDate} · monthly ${monthlyDate}`;
+}
+
+loadSupabaseData().catch((error) => {
+  console.warn("Using preview data because Supabase is not configured.", error);
+});
