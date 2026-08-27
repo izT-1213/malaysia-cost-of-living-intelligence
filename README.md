@@ -16,6 +16,12 @@ python -m pipeline.cli --help
 python -m pipeline.cli download
 # Run the end-to-end local load after setting SUPABASE_URL and SUPABASE_KEY
 python -m pipeline.cli daily
+# Load only the latest 30 days as compact summaries
+python -m pipeline.cli daily-summary
+# Test the rolling path with a small sample
+python -m pipeline.cli daily-summary --limit 1000
+# Backfill one complete historical month as compact summaries
+python -m pipeline.cli backfill-month --month 2026-07
 ```
 
 ## Daily update automation

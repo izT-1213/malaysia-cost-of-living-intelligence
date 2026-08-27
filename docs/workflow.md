@@ -52,9 +52,9 @@ upserts deterministic.
 
 ## Planned execution order
 
-1. Apply `supabase/migrations/003_summary_tables.sql`.
-2. Implement and test the summarization functions locally.
+1. [x] Apply `supabase/migrations/003_summary_tables.sql`.
+2. [x] Implement and test the summarization functions locally.
 3. Backfill historical monthly summaries.
-4. Replace the current full-raw daily workflow with the rolling-summary job.
+4. [x] Replace the current full-raw daily command with the rolling-summary job.
 5. Run the revised job manually and verify Supabase size and summary rows.
 6. Re-enable the daily schedule.
