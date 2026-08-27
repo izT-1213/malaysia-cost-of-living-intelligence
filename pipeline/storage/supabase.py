@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
-from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import polars as pl
-from supabase import Client, create_client
 
 from pipeline.config import Settings
+from supabase import Client, create_client
 
 
 def get_client() -> Client:

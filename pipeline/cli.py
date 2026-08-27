@@ -44,12 +44,35 @@ def main() -> None:
     )
     daily_parser.add_argument("--raw-dir", default="data/raw/pricecatcher")
     daily_parser.add_argument("--batch-size", type=int, default=500)
+    daily_summary_parser = subparsers.add_parser(
+        "daily-summary", help="Summarize the latest 30 days and load them into Supabase"
+    )
+    daily_summary_parser.add_argument("--raw-dir", default="data/raw/pricecatcher")
+    daily_summary_parser.add_argument("--days", type=int, default=30)
+    daily_summary_parser.add_argument("--as-of", help="Processing date in YYYY-MM-DD; defaults to today")
+    daily_summary_parser.add_argument("--limit", type=int, help="Optional row limit for a small connectivity test")
+    daily_summary_parser.add_argument("--batch-size", type=int, default=500)
+    backfill_parser = subparsers.add_parser(
+        "backfill-month", help="Summarize one complete month and load it into Supabase"
+    )
+    backfill_parser.add_argument("--month", required=True, help="Source month in YYYY-MM")
+    backfill_parser.add_argument("--raw-dir", default="data/raw/pricecatcher")
+    backfill_parser.add_argument("--limit", type=int, help="Optional row limit for a small connectivity test")
+    backfill_parser.add_argument("--batch-size", type=int, default=500)
     load_parser = subparsers.add_parser("load-local", help="Load local PriceCatcher Parquet files into Supabase")
     load_parser.add_argument("--prices", required=True, help="Path to a PriceCatcher monthly Parquet file")
     load_parser.add_argument("--items", required=True, help="Path to the item lookup Parquet file")
     load_parser.add_argument("--premises", required=True, help="Path to the premise lookup Parquet file")
     load_parser.add_argument("--limit", type=int, help="Optional row limit for a small connectivity test")
     load_parser.add_argument("--batch-size", type=int, default=500)
+    summary_parser = subparsers.add_parser(
+        "load-summary-local", help="Summarize local PriceCatcher data and load it into Supabase"
+    )
+    summary_parser.add_argument("--prices", required=True, help="Path to a PriceCatcher monthly Parquet file")
+    summary_parser.add_argument("--items", required=True, help="Path to the item lookup Parquet file")
+    summary_parser.add_argument("--premises", required=True, help="Path to the premise lookup Parquet file")
+    summary_parser.add_argument("--limit", type=int, help="Optional row limit for a small connectivity test")
+    summary_parser.add_argument("--batch-size", type=int, default=500)
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
@@ -182,6 +205,28 @@ def main() -> None:
             client, prices, source_month, metadata["sha256"], args.batch_size
         )
         print(f"Loaded {item_count} items, {premise_count} premises, {observation_count} observations")
+    elif args.command == "load-summary-local":
+        prices_path = Path(args.prices)
+        metadata = json.loads((prices_path.parent / "metadata.json").read_text())
+        prices = pl.read_parquet(prices_path)
+        if args.limit:
+            prices = prices.head(args.limit)
+        enriched = enrich_observations(
+            normalize_columns(prices),
+            pl.read_parquet(args.items),
+            pl.read_parquet(args.premises),
+        )
+        client = get_client()
+        load_source_snapshot(client, {**metadata, "rows_seen": prices.height})
+        daily = summarize_item_area(enriched, period="daily")
+        monthly = summarize_item_area(enriched, period="monthly")
+        daily_count = load_item_area_summary(
+            client, daily, "daily_item_area_summary", metadata["sha256"], args.batch_size
+        )
+        monthly_count = load_item_area_summary(
+            client, monthly, "monthly_item_area_summary", metadata["sha256"], args.batch_size
+        )
+        print(f"Loaded {daily_count:,} daily and {monthly_count:,} monthly summaries")
 
 
 if __name__ == "__main__":

@@ -29,5 +29,5 @@ jobs:
       - name: Install pipeline
         run: python -m pip install --upgrade pip && python -m pip install .
 
-      - name: Load current PriceCatcher data
-        run: python -m pipeline.cli daily
+      - name: Load recent PriceCatcher summaries
+        run: python -m pipeline.cli daily-summary
