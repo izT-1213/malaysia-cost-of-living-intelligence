@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import polars as pl
 
+from pipeline.transforms.geography import canonicalize_geography
+
 
 def enrich_observations(
     observations: pl.DataFrame,
@@ -31,4 +33,4 @@ def enrich_observations(
     existing_attributes = (item_attributes | premise_attributes) & set(observations.columns)
     base = observations.drop(sorted(existing_attributes))
     result = base.join(items, on="item_id", how="left", validate="m:1")
-    return result.join(premises, on="premise_id", how="left", validate="m:1")
+    return canonicalize_geography(result.join(premises, on="premise_id", how="left", validate="m:1"))

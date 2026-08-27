@@ -71,6 +71,30 @@ def test_enrich_observations_joins_official_lookup_fields():
     assert result.select("item_name", "premise_name", "state").row(0) == ("Rice", "Market", "Perak")
 
 
+def test_enrich_observations_canonicalizes_reviewed_geographies():
+    observations = pl.DataFrame({
+        "date": [date(2026, 8, 19)] * 5,
+        "item_id": [1] * 5,
+        "premise_id": [1, 2, 3, 4, 5],
+        "price": [1.0] * 5,
+    })
+    items = pl.DataFrame({"item_code": [1], "item": ["Rice"]})
+    premises = pl.DataFrame({
+        "premise_code": [1, 2, 3, 4, 5],
+        "premise": ["A", "B", "C", "D", "E"],
+        "state": ["Selangor", "Selangor", "W.P. Putrajaya", "Sarawak", "W.P. Putrajaya"],
+        "district": ["Petaling Jaya", "Rawang", "Cyberjaya", "Sibujaya", "Wp Putrajaya"],
+    })
+    result = enrich_observations(observations, items, premises).sort("premise_id")
+    assert result.select("source_state", "source_district", "state", "district").rows() == [
+        ("Selangor", "Petaling Jaya", "Selangor", "Petaling"),
+        ("Selangor", "Rawang", "Selangor", "Gombak"),
+        ("W.P. Putrajaya", "Cyberjaya", "Selangor", "Sepang"),
+        ("Sarawak", "Sibujaya", "Sarawak", "Sibu"),
+        ("W.P. Putrajaya", "Wp Putrajaya", "W.P. Putrajaya", "Putrajaya"),
+    ]
+
+
 def test_daily_summary_creates_state_and_district_rows():
     frame = pl.DataFrame({
         "date": [date(2026, 8, 19)] * 3,
