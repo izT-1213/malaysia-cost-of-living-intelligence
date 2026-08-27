@@ -12,6 +12,8 @@ source .venv/bin/activate
 pip install -e '.[dev]'
 python -m pytest
 python -m pipeline.cli --help
+# Download the current month's PriceCatcher Parquet snapshot
+python -m pipeline.cli download
 ```
 
 ## Repository map

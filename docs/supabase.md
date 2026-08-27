@@ -6,8 +6,9 @@ Supabase is the application database and serving layer. Raw source snapshots bel
 
 1. Create a Supabase project.
 2. Run `supabase/migrations/001_initial_schema.sql` in the Supabase SQL Editor.
-3. Set `SUPABASE_URL` and `SUPABASE_KEY` in the local `.env` file.
-4. Keep the service key private. It is for the ingestion job only and must never be shipped to the web app.
+3. Run `supabase/migrations/002_allow_unmatched_lookup_codes.sql` after it. This preserves transaction rows when the item lookup lags the current feed.
+4. Set `SUPABASE_URL` and `SUPABASE_KEY` in the local `.env` file.
+5. Keep the service key private. It is for the ingestion job only and must never be shipped to the web app.
 
 ## Data responsibilities
 
