@@ -27,20 +27,34 @@ const districtFilter = document.querySelector("#district-filter");
 const itemFilter = document.querySelector("#item-filter");
 const table = document.querySelector("#state-table");
 
+function replaceOptions(select, values) {
+  const first = select.querySelector("option").cloneNode(true);
+  select.replaceChildren(first);
+  [...new Set(values)].filter(Boolean).sort().forEach((value) => {
+    select.insertAdjacentHTML("beforeend", `<option value="${value}">${value}</option>`);
+  });
+}
+
 function populateFilters() {
-  [stateFilter, districtFilter, itemFilter].forEach((select) => {
-    const first = select.querySelector("option").cloneNode(true);
-    select.replaceChildren(first);
-  });
-  [...new Set(observations.map((row) => row.state))].sort().forEach((state) => {
-    stateFilter.insertAdjacentHTML("beforeend", `<option value="${state}">${state}</option>`);
-  });
-  [...new Set(observations.map((row) => row.item))].sort().forEach((item) => {
-    itemFilter.insertAdjacentHTML("beforeend", `<option value="${item}">${item}</option>`);
-  });
-  Object.values(districts).flat().sort().forEach((district) => {
-    districtFilter.insertAdjacentHTML("beforeend", `<option value="${district}">${district}</option>`);
-  });
+  const selectedItem = itemFilter.value;
+  const selectedState = stateFilter.value;
+  const selectedDistrict = districtFilter.value;
+  const itemValues = observations.map((row) => row.item);
+  replaceOptions(itemFilter, itemValues);
+  itemFilter.value = itemValues.includes(selectedItem) ? selectedItem : "all";
+
+  const itemRows = itemFilter.value === "all" ? observations : observations.filter((row) => row.item === itemFilter.value);
+  const stateRows = itemRows.filter((row) => !row.areaLevel || row.areaLevel === "state");
+  const stateValues = stateRows.map((row) => row.state);
+  replaceOptions(stateFilter, stateValues);
+  stateFilter.value = stateValues.includes(selectedState) ? selectedState : "all";
+
+  const districtRows = itemRows.filter((row) => (!row.areaLevel || row.areaLevel === "district") && (stateFilter.value === "all" || row.state === stateFilter.value));
+  const districtValues = districtRows.some((row) => row.district)
+    ? districtRows.map((row) => row.district)
+    : (stateFilter.value === "all" ? Object.values(districts).flat() : districts[stateFilter.value] || []);
+  replaceOptions(districtFilter, districtValues);
+  districtFilter.value = districtValues.includes(selectedDistrict) ? selectedDistrict : "all";
 }
 
 function selectedRows() {
@@ -60,16 +74,33 @@ function renderMetrics(rows) {
   document.querySelector("#median-value").textContent = money(median);
   document.querySelector("#min-value").textContent = money(min);
   document.querySelector("#max-value").textContent = money(max);
-  document.querySelector("#areas-value").textContent = rows.length;
-  document.querySelector("#median-caption").textContent = rows.length === 1 ? rows[0].state : "Across selected states";
+  const areaNames = new Set(rows.map((row) => districtFilter.value === "all" ? row.state : row.district));
+  document.querySelector("#areas-value").textContent = areaNames.size;
+  document.querySelector("#median-caption").textContent = rows.length === 1 ? rows[0].state : "Across selected areas";
   document.querySelector("#min-caption").textContent = rows.find((row) => row.min === min)?.state || "Selected area";
   document.querySelector("#max-caption").textContent = rows.find((row) => row.max === max)?.state || "Selected area";
 }
 
 function renderTable(rows) {
-  table.innerHTML = rows.map((row) => `
+  const areaLabel = districtFilter.value === "all" ? "state" : "district";
+  const grouped = [...rows.reduce((groups, row) => {
+    const key = areaLabel === "district" ? row.district : row.state;
+    const group = groups.get(key) || { name: key, medians: [], min: Infinity, max: -Infinity };
+    group.medians.push(row.median);
+    group.min = Math.min(group.min, row.min);
+    group.max = Math.max(group.max, row.max);
+    groups.set(key, group);
+    return groups;
+  }, new Map()).values()].map((group) => {
+    const values = [...group.medians].sort((a, b) => a - b);
+    const middle = Math.floor(values.length / 2);
+    const median = values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+    return { ...group, median };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  document.querySelector("#table-title").textContent = areaLabel === "state" ? "Prices by state" : "Prices by district";
+  table.innerHTML = grouped.map((row) => `
     <tr>
-      <th scope="row">${row.state}</th>
+      <th scope="row">${row.name}</th>
       <td>${money(row.median)}</td>
       <td>${money(row.min)}</td>
       <td>${money(row.max)}</td>
@@ -101,11 +132,13 @@ function render() {
 populateFilters();
 renderChart();
 render();
-stateFilter.addEventListener("change", render);
+stateFilter.addEventListener("change", () => { populateFilters(); render(); });
 districtFilter.addEventListener("change", render);
-itemFilter.addEventListener("change", render);
+itemFilter.addEventListener("change", () => { populateFilters(); render(); });
 document.querySelector("#period-filter").addEventListener("change", (event) => {
   observations = datasets[event.target.value] || [...demoObservations];
+  document.querySelector(".hero-note strong").textContent = event.target.value === "monthly" ? "Monthly item prices" : "Daily item prices";
+  document.querySelector(".trend-badge").textContent = event.target.value === "monthly" ? "Historical month" : "Latest day";
   populateFilters();
   render();
 });
@@ -114,6 +147,8 @@ document.querySelector("#reset-filters").addEventListener("click", () => {
   districtFilter.value = "all";
   itemFilter.value = "all";
   document.querySelector("#period-filter").value = "daily";
+  document.querySelector(".hero-note strong").textContent = "Daily item prices";
+  document.querySelector(".trend-badge").textContent = "Latest day";
   render();
 });
 document.querySelector("#download-button").addEventListener("click", () => {
@@ -175,10 +210,14 @@ async function loadSupabaseData() {
   const monthlyDate = latestMonthly[0].metric_month;
   const daily = await supabaseGet(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=eq.${dailyDate}&order=state.asc,item_code.asc&limit=20000`);
   const monthly = await supabaseGet(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc&limit=20000`);
+  const districtLookup = await supabaseGet(`daily_item_area_summary?select=state,district&area_level=eq.district&metric_date=eq.${dailyDate}&order=state.asc,district.asc&limit=10000`);
   datasets.daily = toRows(daily, itemNames);
   datasets.monthly = toRows(monthly, itemNames);
   observations = datasets[document.querySelector("#period-filter").value];
   districts = {};
+  districtLookup.forEach((row) => {
+    if (row.district) districts[row.state] = [...new Set([...(districts[row.state] || []), row.district])];
+  });
   [...datasets.daily, ...datasets.monthly].forEach((row) => {
     if (row.district) districts[row.state] = [...new Set([...(districts[row.state] || []), row.district])];
   });
