@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Explore Malaysia PriceCatcher food price observations and summaries." />
+    <title>PriceLens Malaysia</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./">
+          <span class="brand-mark" aria-hidden="true">RM</span>
+          <span>
+            <strong>PriceLens</strong>
+            <small>Malaysia cost of living</small>
+          </span>
+        </a>
+        <nav class="site-nav" aria-label="Main navigation">
+          <button class="nav-button active" type="button" data-view="dashboard-view">Dashboard</button>
+          <button class="nav-button" type="button" data-view="about-view">About</button>
+        </nav>
+        <div class="topbar-meta">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>PriceCatcher data</span>
+          <span class="divider" aria-hidden="true"></span>
+          <span>Updated daily</span>
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme (currently system mode)"><span aria-hidden="true">☼</span><span id="theme-label">System</span></button>
+        </div>
+      </header>
+
+      <main>
+        <div id="dashboard-view">
+        <section class="hero">
+          <div>
+            <p class="eyebrow">A clearer view of everyday prices</p>
+            <h1>What does a basket cost<br /><em>near you?</em></h1>
+            <p class="hero-copy">
+              Explore deterministic summaries from Malaysia’s PriceCatcher observations across states, districts, and items.
+            </p>
+          </div>
+          <div class="hero-note">
+            <span class="note-label">Current view</span>
+            <strong>Daily item prices</strong>
+            <span>26 August 2026</span>
+          </div>
+        </section>
+
+        <section class="controls" aria-label="Dashboard filters">
+          <label>
+            <span>Item</span>
+            <select id="item-filter">
+              <option value="all">All tracked items</option>
+            </select>
+          </label>
+          <label>
+            <span>State</span>
+            <select id="state-filter">
+              <option value="all">All states</option>
+            </select>
+          </label>
+          <label>
+            <span>District</span>
+            <select id="district-filter"><option value="all">All districts</option></select>
+          </label>
+          <label>
+            <span>Period</span>
+            <select id="period-filter">
+              <option value="daily">Latest day</option>
+              <option value="monthly">Monthly view</option>
+            </select>
+          </label>
+          <button class="reset-button" id="reset-filters" type="button">Reset filters</button>
+        </section>
+
+        <div class="demo-banner" role="status">
+          <span class="demo-icon" aria-hidden="true">i</span>
+          <span>This preview uses representative data. The next step is connecting these views to Supabase.</span>
+        </div>
+
+        <section class="metric-grid" aria-label="Key metrics">
+          <article class="metric-card metric-card-dark">
+            <span class="metric-label">Median basket price</span>
+            <strong id="median-value">RM 12.40</strong>
+            <span class="metric-caption" id="median-caption">Across selected observations</span>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Lowest observed</span>
+            <strong id="min-value">RM 8.90</strong>
+            <span class="metric-caption" id="min-caption">Selected item and area</span>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Highest observed</span>
+            <strong id="max-value">RM 16.80</strong>
+            <span class="metric-caption" id="max-caption">Selected item and area</span>
+          </article>
+          <article class="metric-card metric-card-accent">
+            <span class="metric-label">Areas compared</span>
+            <strong id="areas-value">8</strong>
+            <span class="metric-caption">States and districts</span>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel trend-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Price movement</p>
+                <h2>Median price trend</h2>
+              </div>
+              <span class="trend-badge">Last 7 days</span>
+            </div>
+            <div class="chart" id="trend-chart" aria-label="Seven day median price trend"></div>
+            <div class="chart-axis"><span>20 Aug</span><span>26 Aug</span></div>
+          </article>
+
+          <article class="panel insight-panel">
+            <p class="eyebrow">Today’s signal</p>
+            <h2>Where is the spread widest?</h2>
+            <div class="signal-number">RM 7.90</div>
+            <p class="signal-copy">Difference between the lowest and highest observed prices in the current selection.</p>
+            <div class="signal-rule"></div>
+            <p class="signal-footnote">Calculated from structured observations, not generated by AI.</p>
+          </article>
+        </section>
+
+        <section class="panel table-panel">
+          <div class="panel-heading table-heading">
+            <div>
+              <p class="eyebrow">Area comparison</p>
+              <h2>Prices by state</h2>
+            </div>
+            <button class="text-button" type="button" id="download-button">Download view</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th scope="col">State</th><th scope="col">Median</th><th scope="col">Lowest</th><th scope="col">Highest</th><th scope="col">Range</th></tr>
+              </thead>
+              <tbody id="state-table"></tbody>
+            </table>
+          </div>
+        </section>
+        </div>
+
+        <section id="about-view" class="about-view" hidden>
+          <div class="about-intro">
+            <p class="eyebrow">Project notes</p>
+            <h1>A transparent price<br /><em>intelligence layer.</em></h1>
+            <p>PriceLens turns high-frequency PriceCatcher observations into compact, reproducible summaries that are easier to explore and cheaper to keep online.</p>
+          </div>
+          <div class="blueprint" aria-label="Data pipeline blueprint">
+            <div class="blueprint-grid"></div><div class="blueprint-label">SYSTEM MAP / 01</div>
+            <div class="pipeline-node node-source"><span class="node-index">01</span><strong>Government source</strong><small>Monthly Parquet snapshots<br />PriceCatcher + lookups</small></div>
+            <div class="pipeline-node node-clean"><span class="node-index">02</span><strong>Normalize + map</strong><small>Stable dates, item codes,<br />premises, states, districts</small></div>
+            <div class="pipeline-node node-metrics"><span class="node-index">03</span><strong>Deterministic metrics</strong><small>Min · median · max<br />No AI in calculations</small></div>
+            <div class="pipeline-node node-store"><span class="node-index">04</span><strong>Compact serving layer</strong><small>Daily detail window<br />Monthly summaries</small></div>
+            <div class="pipeline-line line-one"></div><div class="pipeline-line line-two"></div><div class="pipeline-line line-three"></div>
+          </div>
+          <div class="about-grid">
+            <article class="about-card"><p class="eyebrow">Data source</p><h2>PriceCatcher</h2><p>Prices are collected and verified daily by groundstaff under Malaysia’s Ministry of Domestic Trade. Codes are mapped through official lookup tables.</p><a href="https://data.gov.my/data-catalogue/pricecatcher" target="_blank" rel="noreferrer">View official catalogue ↗</a></article>
+            <article class="about-card"><p class="eyebrow">Storage design</p><h2>Built for free tiers</h2><p>Raw detail is kept only for the latest 30 days. Older months become compact summaries so the project stays within free database limits.</p><span class="about-chip">Incremental · idempotent · reproducible</span></article>
+            <article class="about-card"><p class="eyebrow">AI boundary</p><h2>Explain, don’t calculate</h2><p>All price statistics are calculated by code. AI may explain validated movements, but it will not calculate the underlying metrics.</p><span class="about-chip">Deterministic by design</span></article>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <span>Source: Ministry of Domestic Trade · PriceCatcher</span>
+          <span>For price surveillance and exploration, not a replacement for CPI.</span>
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
