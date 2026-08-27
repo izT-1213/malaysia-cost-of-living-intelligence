@@ -14,7 +14,16 @@ python -m pytest
 python -m pipeline.cli --help
 # Download the current month's PriceCatcher Parquet snapshot
 python -m pipeline.cli download
+# Run the end-to-end local load after setting SUPABASE_URL and SUPABASE_KEY
+python -m pipeline.cli daily
 ```
+
+## Daily update automation
+
+The GitHub Actions workflow in `.github/workflows/pricecatcher-daily.yml` can be
+run manually or on its daily schedule. Add `SUPABASE_URL` and `SUPABASE_KEY` as
+GitHub repository secrets before running it. The job downloads the current
+monthly snapshot and lookup files, then upserts them idempotently into Supabase.
 
 ## Repository map
 
