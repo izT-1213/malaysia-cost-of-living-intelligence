@@ -13,7 +13,11 @@ Supabase is the application database and serving layer. Raw source snapshots bel
 ## Data responsibilities
 
 - `item_lookup` and `premise_lookup`: public reference data.
-- `price_observations`: normalized source observations; writes happen through the private pipeline.
+- `price_observations`: normalized source observations used as the current ingestion layer; writes happen through the private pipeline.
+- `daily_item_area_summary`: compact recent daily prices by item and area.
+- `monthly_item_area_summary`: compact historical monthly prices by item and area.
+- `monthly_category_summary`: category-level movement based on comparable item changes.
+- `source_snapshots`: source URLs, hashes, row counts, and retrieval timestamps for reproducibility.
 - `pipeline_runs`: ingestion provenance and operational status.
 - `daily_metrics`: dashboard-ready deterministic results.
 - `ai_insights`: optional cached explanations of structured metrics.

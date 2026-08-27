@@ -9,9 +9,10 @@
 
 ## Phase 2 — usable local product
 
-- [ ] Incremental PriceCatcher fetcher with provenance metadata
+- [x] Incremental PriceCatcher fetcher with provenance metadata
 - [ ] Parquet partitions and DuckDB exploration queries
-- [ ] Basket, geography, trend, and anomaly metric tables
+- [ ] Compact daily and monthly summary tables
+- [ ] Historical PriceCatcher summary backfill
 - [ ] Data-quality report and sample fixture
 
 ## Phase 3 — public dashboard
@@ -24,5 +25,5 @@
 
 - [ ] Change detector and structured insight payloads
 - [ ] Provider abstraction and cached optional AI explanations
-- [ ] GitHub Actions-compatible scheduled pipeline
+- [ ] GitHub Actions-compatible summary pipeline
 - [ ] Add carefully documented public datasets beyond PriceCatcher
