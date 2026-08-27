@@ -6,6 +6,7 @@ import pytest
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
 from pipeline.quality.pricecatcher import validate_observations
 from pipeline.transforms.pricecatcher import normalize_columns
+from pipeline.transforms.enrich import enrich_observations
 from pipeline.ingestion.pricecatcher import monthly_url
 
 
@@ -55,3 +56,13 @@ def test_pricecatcher_monthly_url_is_deterministic():
     assert monthly_url(date(2026, 8, 20)) == (
         "https://storage.data.gov.my/pricecatcher/pricecatcher_2026-08.parquet"
     )
+
+
+def test_enrich_observations_joins_official_lookup_fields():
+    observations = pl.DataFrame({
+        "date": [date(2026, 8, 19)], "item_id": [1], "premise_id": [2], "price": [11.0]
+    })
+    items = pl.DataFrame({"item_code": [1], "item": ["Rice"], "unit": ["kg"]})
+    premises = pl.DataFrame({"premise_code": [2], "premise": ["Market"], "state": ["Perak"]})
+    result = enrich_observations(observations, items, premises)
+    assert result.select("item_name", "premise_name", "state").row(0) == ("Rice", "Market", "Perak")

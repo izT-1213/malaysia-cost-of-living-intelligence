@@ -22,6 +22,8 @@ The lookup tables are required to enrich the source observations. Expected norma
 - state and district
 - source batch identifier
 
+The item lookup may lag the transactional feed. Unknown item codes must be preserved as valid source observations and reported as an enrichment-quality gap; the pipeline must not silently discard those rows.
+
 The pipeline accepts aliases for common source column names, but unknown source schemas should be rejected rather than silently guessed.
 
 ## Planned extensions

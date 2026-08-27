@@ -45,9 +45,37 @@ def download_monthly_snapshot(
     value: date | None = None,
     timeout_seconds: float = 120.0,
 ) -> DownloadResult:
-    """Download a source snapshot, preserving it under a content-addressed folder."""
+    """Download a monthly source snapshot."""
     month = month_string(value)
     url = monthly_url(value)
+    return _download_url_snapshot(raw_dir, url, f"pricecatcher_{month}.parquet", month, timeout_seconds)
+
+
+def download_lookup_snapshot(
+    lookup_name: str,
+    raw_dir: Path,
+    timeout_seconds: float = 120.0,
+) -> DownloadResult:
+    """Download a static PriceCatcher lookup table."""
+    if lookup_name not in LOOKUP_URLS:
+        raise ValueError(f"Unknown lookup: {lookup_name}; expected one of {sorted(LOOKUP_URLS)}")
+    return _download_url_snapshot(
+        raw_dir,
+        LOOKUP_URLS[lookup_name],
+        f"lookup_{lookup_name}.parquet",
+        "static",
+        timeout_seconds,
+    )
+
+
+def _download_url_snapshot(
+    raw_dir: Path,
+    url: str,
+    filename: str,
+    source_month: str,
+    timeout_seconds: float,
+) -> DownloadResult:
+    """Download a URL, preserving it under a content-addressed folder."""
     raw_dir.mkdir(parents=True, exist_ok=True)
     temp_path: Path | None = None
     digest = hashlib.sha256()
@@ -65,7 +93,7 @@ def download_monthly_snapshot(
         sha256 = digest.hexdigest()
         batch_dir = raw_dir / sha256[:12]
         batch_dir.mkdir(parents=True, exist_ok=True)
-        destination = batch_dir / f"pricecatcher_{month}.parquet"
+        destination = batch_dir / filename
         if destination.exists():
             temp_path.unlink()
         else:
@@ -73,14 +101,14 @@ def download_monthly_snapshot(
         retrieved_at = datetime.now(timezone.utc).isoformat()
         metadata = {
             "source_name": "pricecatcher",
-            "source_month": month,
+            "source_month": source_month,
             "source_url": url,
             "sha256": sha256,
             "bytes_downloaded": bytes_downloaded,
             "retrieved_at_utc": retrieved_at,
         }
         (batch_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
-        return DownloadResult(month, url, destination, sha256, bytes_downloaded, retrieved_at)
+        return DownloadResult(source_month, url, destination, sha256, bytes_downloaded, retrieved_at)
     except Exception:
         if temp_path is not None and temp_path.exists():
             temp_path.unlink()
