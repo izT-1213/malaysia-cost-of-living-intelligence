@@ -9,9 +9,11 @@ from pathlib import Path
 
 import polars as pl
 
+from pipeline.config import Settings
 from pipeline.ingestion.pricecatcher import download_lookup_snapshot, download_monthly_snapshot
 from pipeline.storage.supabase import (
     delete_observations_before,
+    delete_premise_summaries_before,
     get_client,
     load_item_area_summary,
     load_lookup,
@@ -93,6 +95,8 @@ def main() -> None:
         item_result = download_lookup_snapshot("item", raw_dir)
         premise_result = download_lookup_snapshot("premise", raw_dir)
         client = get_client()
+        premise_cutoff = as_of - timedelta(days=6)
+        delete_premise_summaries_before(client, premise_cutoff)
         item_count = load_lookup(client, pl.read_parquet(item_result.destination), "item_lookup", args.batch_size)
         premise_count = load_lookup(
             client, pl.read_parquet(premise_result.destination), "premise_lookup", args.batch_size
@@ -127,17 +131,19 @@ def main() -> None:
             current = current.head(args.limit)
             previous = previous.head(args.limit)
         prices = recent_window(pl.concat([previous, current], how="vertical_relaxed"), as_of, args.days)
-        delete_observations_before(client, as_of - timedelta(days=args.days - 1))
-        for source_prices, result in ((previous, previous_result), (current, current_result)):
-            source_prices = recent_window(source_prices, as_of, args.days)
-            if source_prices.height:
-                load_observations(
-                    client,
-                    source_prices.rename({"item_id": "item_code", "premise_id": "premise_code"}),
-                    date.fromisoformat(f"{result.source_month}-01"),
-                    result.sha256,
-                    args.batch_size,
-                )
+        settings = Settings.from_environment()
+        if settings.store_raw_observations:
+            delete_observations_before(client, as_of - timedelta(days=args.days - 1))
+            for source_prices, result in ((previous, previous_result), (current, current_result)):
+                source_prices = recent_window(source_prices, as_of, args.days)
+                if source_prices.height:
+                    load_observations(
+                        client,
+                        source_prices.rename({"item_id": "item_code", "premise_id": "premise_code"}),
+                        date.fromisoformat(f"{result.source_month}-01"),
+                        result.sha256,
+                        args.batch_size,
+                    )
         enriched = enrich_observations(
             prices,
             pl.read_parquet(item_result.destination),
@@ -157,7 +163,7 @@ def main() -> None:
         daily_count = load_item_area_summary(
             client, daily, "daily_item_area_summary", source_hash, args.batch_size
         )
-        premise_daily = summarize_item_premise(enriched)
+        premise_daily = summarize_item_premise(recent_window(enriched, as_of, days=7))
         premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
         print(
             f"Daily summary load complete: {item_count:,} items, {premise_count:,} premises, "

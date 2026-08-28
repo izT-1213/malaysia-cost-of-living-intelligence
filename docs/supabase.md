@@ -1,21 +1,27 @@
 # Supabase setup
 
-Supabase is the application database and serving layer. Raw source snapshots belong in Supabase Storage; cleaned observations, lookup tables, metrics, and cached insights belong in PostgreSQL.
+Supabase is the application database and serving layer. The scheduled free-tier setup keeps source files only in the temporary GitHub Actions workspace while a run is executing; it stores lookup data, source metadata, and compact summaries in PostgreSQL. Raw observations are optional and disabled by default.
 
 ## Local setup
 
 1. Create a Supabase project.
 2. Run `supabase/migrations/001_initial_schema.sql` in the Supabase SQL Editor.
 3. Run `supabase/migrations/002_allow_unmatched_lookup_codes.sql` after it. This preserves transaction rows when the item lookup lags the current feed.
-4. Set `SUPABASE_URL` and `SUPABASE_KEY` in the local `.env` file.
-5. Keep the service key private. It is for the ingestion job only and must never be shipped to the web app.
+4. Run `supabase/migrations/003_summary_tables.sql` and then `supabase/migrations/004_daily_item_premise_summary.sql`.
+5. Set `SUPABASE_URL` and `SUPABASE_KEY` in the local `.env` file.
+6. Keep the service key private. It is for the ingestion job only and must never be shipped to the web app.
+7. Leave `STORE_RAW_OBSERVATIONS=false` for the free-tier deployment. Set it to `true` only for an explicitly controlled local run where raw observations are required.
+
+## Fresh free-tier project migration
+
+The old project should not be used for recovery because it is locked in read-only mode. Create a new Free Supabase project, run the four migrations above in order, and then replace the GitHub Actions `SUPABASE_URL` and `SUPABASE_KEY` secrets with the new project's values. The scheduled workflow downloads Parquet files only for the duration of each run and writes compact summaries, so it does not recreate the large raw observation table.
 
 ## Data responsibilities
 
 - `item_lookup` and `premise_lookup`: public reference data.
-- `price_observations`: normalized source observations used as the current ingestion layer; writes happen through the private pipeline.
+- `price_observations`: optional normalized source observations; the scheduled free-tier workflow does not write this table.
 - `daily_item_area_summary`: compact recent daily prices by item and area.
-- `daily_item_premise_summary`: compact recent daily prices by item and premise for custom basket comparisons.
+- `daily_item_premise_summary`: compact latest-seven-day prices by item and premise for custom basket comparisons.
 - `monthly_item_area_summary`: compact historical monthly prices by item and area.
 - `monthly_category_summary`: category-level movement based on comparable item changes.
 - `source_snapshots`: source URLs, hashes, row counts, and retrieval timestamps for reproducibility.
