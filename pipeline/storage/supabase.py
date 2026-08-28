@@ -189,5 +189,27 @@ def load_source_snapshot(client: Client, metadata: dict[str, Any]) -> int:
     return 1
 
 
+def load_ai_insight(
+    client: Client,
+    insight_date: date,
+    payload: dict[str, Any],
+    generated_text: str,
+    provider: str,
+    model: str | None,
+) -> None:
+    """Upsert one compact explanation of deterministic dashboard metrics."""
+    client.table("ai_insights").upsert(
+        [{
+            "insight_date": insight_date.isoformat(),
+            "insight_type": "daily_summary",
+            "analytical_payload": payload,
+            "generated_text": generated_text,
+            "provider": provider,
+            "model": model,
+        }],
+        on_conflict="insight_date",
+    ).execute()
+
+
 def _optional_int(value: Any) -> int | None:
     return None if value is None else int(value)

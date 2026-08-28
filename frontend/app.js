@@ -60,6 +60,7 @@ let premiseDataLoaded = false;
 let premiseDataLoading = false;
 let dailyDateForPremise = "";
 let dailyStartDateForPremise = "";
+let aiInsightBundle = { general: "", states: {} };
 
 function replaceOptions(select, values) {
   const first = select.querySelector("option").cloneNode(true);
@@ -67,6 +68,32 @@ function replaceOptions(select, values) {
   [...new Set(values)].filter(Boolean).sort().forEach((value) => {
     select.insertAdjacentHTML("beforeend", `<option value="${value}">${value}</option>`);
   });
+}
+
+function stateRowsForInsight() {
+  const rows = datasets.daily.filter((row) => row.areaLevel === "state");
+  const latest = rows.reduce((value, row) => row.metricDate > value ? row.metricDate : value, "");
+  return rows.filter((row) => row.metricDate === latest);
+}
+
+function showStateInsight(state) {
+  const rows = stateRowsForInsight().filter((row) => row.state === state);
+  const median = rows.length ? rows.reduce((sum, row) => sum + row.median, 0) / rows.length : null;
+  document.querySelector("#state-detail-name").textContent = state || "Select a state";
+  document.querySelector("#state-detail-value").textContent = median === null ? "—" : money(median);
+  document.querySelector("#state-detail-copy").textContent = aiInsightBundle.state_insights?.[state] || aiInsightBundle.states?.[state] || "No stored state insight is available for this selection yet.";
+  document.querySelectorAll(".map-state").forEach((button) => button.classList.toggle("selected", button.dataset.state === state));
+}
+
+function renderInsightMap() {
+  const map = document.querySelector("#state-map");
+  if (!map) return;
+  const states = [...new Set(stateRowsForInsight().map((row) => row.state).filter(Boolean))].sort();
+  map.innerHTML = states.length
+    ? states.map((state) => `<button class="map-state" type="button" data-state="${state}" title="View ${state} insight">${state}</button>`).join("")
+    : '<p class="ai-map-empty">No state summaries are available yet.</p>';
+  map.querySelectorAll(".map-state").forEach((button) => button.addEventListener("click", () => showStateInsight(button.dataset.state)));
+  if (states.length) showStateInsight(states[0]);
 }
 
 function renderCustomBuilder() {
@@ -464,7 +491,7 @@ document.querySelectorAll(".nav-button").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll(".nav-button").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
-    document.querySelectorAll("#dashboard-view, #custom-view, #about-view").forEach((view) => { view.hidden = view.id !== button.dataset.view; });
+    document.querySelectorAll("#dashboard-view, #ai-view, #custom-view, #about-view").forEach((view) => { view.hidden = view.id !== button.dataset.view; });
     if (button.dataset.view === "dashboard-view") {
       viewFilter.value = "basket";
       customBasketPanel.hidden = true;
@@ -472,6 +499,8 @@ document.querySelectorAll(".nav-button").forEach((button) => {
     } else if (button.dataset.view === "custom-view") {
       viewFilter.value = "custom";
       customBasketPanel.hidden = false;
+    } else if (button.dataset.view === "ai-view") {
+      renderInsightMap();
     }
   });
 });
@@ -526,7 +555,11 @@ function toRows(rows, itemNames) {
 }
 
 async function loadSupabaseData() {
-  if (!config.url || !config.anonKey || config.anonKey.startsWith("sb_secret_")) return;
+  const banner = document.querySelector(".demo-banner span:last-child");
+  if (!config.url || !config.anonKey || config.anonKey.startsWith("sb_secret_")) {
+    banner.textContent = "Live data is not configured — showing preview data.";
+    return;
+  }
   const items = await supabaseGet("item_lookup?select=item_code,item,unit,item_group,item_category&order=item.asc&limit=1000");
   availableItems = items;
   replaceOptions(customCategory, items.map((item) => item.item_category));
@@ -544,6 +577,19 @@ async function loadSupabaseData() {
   dailyStartDateForPremise = dailyStartDate;
   const daily = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDate}&metric_date=lte.${dailyDate}&order=metric_date.asc,state.asc,item_code.asc`) : [];
   const monthly = monthlyDate ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc`) : [];
+  try {
+    const insights = await supabaseGet("ai_insights?select=generated_text,provider,insight_date,analytical_payload&insight_type=eq.daily_summary&order=insight_date.desc&limit=1");
+    const latestInsight = insights[0];
+    aiInsightBundle = latestInsight?.analytical_payload || { general: latestInsight?.generated_text || "", states: {} };
+    const generalInsight = aiInsightBundle.general || latestInsight?.generated_text || "No generated insight is available yet.";
+    document.querySelector("#ai-insight-copy").textContent = generalInsight;
+    document.querySelector("#ai-general-copy").textContent = generalInsight;
+    document.querySelector("#ai-general-meta").textContent = latestInsight ? `Stored ${latestInsight.insight_date} · ${latestInsight.provider || "rule-based"} explanation` : "Insights are generated from stored summaries, not when this page opens.";
+  } catch (error) {
+    console.warn("AI insight is not available; structured metrics remain available.", error);
+    document.querySelector("#ai-insight-copy").textContent = "AI insight is unavailable; structured metrics remain available.";
+    document.querySelector("#ai-general-copy").textContent = "AI insight is unavailable; structured metrics remain available.";
+  }
   if (!daily.length && !monthly.length) return;
   const districtTable = dailyDate ? "daily_item_area_summary" : "monthly_item_area_summary";
   const districtDateFilter = dailyDate ? `metric_date=eq.${dailyDate}` : `metric_month=eq.${monthlyDate}`;
@@ -568,7 +614,7 @@ async function loadSupabaseData() {
   });
   populateFilters();
   render();
-  const banner = document.querySelector(".demo-banner span:last-child");
+  renderInsightMap();
   banner.textContent = `Connected to Supabase · latest daily window through ${dailyDate || "pending"} · ${monthlyDate ? `monthly ${monthlyDate}` : "monthly summary pending"}`;
 }
 
@@ -604,4 +650,5 @@ async function loadPremiseData(itemCodes) {
 
 loadSupabaseData().catch((error) => {
   console.warn("Using preview data because Supabase is not configured.", error);
+  document.querySelector(".demo-banner span:last-child").textContent = "Live data could not be loaded — showing preview data.";
 });

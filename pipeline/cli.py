@@ -11,6 +11,7 @@ import polars as pl
 
 from pipeline.config import Settings
 from pipeline.ingestion.pricecatcher import download_lookup_snapshot, download_monthly_snapshot
+from pipeline.insights import build_daily_insight_payload, generate_insight_bundle
 from pipeline.storage.supabase import (
     delete_observations_before,
     delete_premise_summaries_before,
@@ -18,6 +19,7 @@ from pipeline.storage.supabase import (
     load_item_area_summary,
     load_lookup,
     load_observations,
+    load_ai_insight,
     load_item_premise_summary,
     load_source_snapshot,
 )
@@ -165,9 +167,13 @@ def main() -> None:
         )
         premise_daily = summarize_item_premise(recent_window(enriched, as_of, days=7))
         premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
+        insight_payload = build_daily_insight_payload(daily, as_of)
+        insight_bundle, insight_provider, insight_model = generate_insight_bundle(insight_payload)
+        load_ai_insight(client, as_of, {**insight_payload, "state_insights": insight_bundle["states"]}, insight_bundle["general"], insight_provider, insight_model)
         print(
             f"Daily summary load complete: {item_count:,} items, {premise_count:,} premises, "
-            f"{daily_count:,} area summaries and {premise_summary_count:,} premise summaries across {args.days} days"
+            f"{daily_count:,} area summaries and {premise_summary_count:,} premise summaries across {args.days} days; "
+            f"insight provider: {insight_provider}"
         )
     elif args.command == "backfill-month":
         raw_dir = Path(args.raw_dir)

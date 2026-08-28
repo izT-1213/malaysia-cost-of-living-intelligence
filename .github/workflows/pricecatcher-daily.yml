@@ -17,6 +17,9 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       STORE_RAW_OBSERVATIONS: "false"
+      AI_PROVIDER: "gemini"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: "gemini-2.5-flash"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
