@@ -131,13 +131,16 @@ function selectedBasketRows() {
   candidates.forEach((row) => {
     const key = `${row.state}|${row.district}`;
     const area = grouped.get(key) || { state: row.state, district: row.district, components: new Map() };
-    area.components.set(String(row.itemCode), row);
+    const itemRows = area.components.get(String(row.itemCode)) || [];
+    itemRows.push(row);
+    area.components.set(String(row.itemCode), itemRows);
     grouped.set(key, area);
   });
   return [...grouped.values()].map((area) => {
     const present = components.map((component) => {
-      const matches = component.itemCodes.map((code) => area.components.get(String(code))).filter(Boolean);
-      return matches.length ? { ...component, row: medianRow(matches) } : null;
+      const matches = component.itemCodes.flatMap((code) => area.components.get(String(code)) || []);
+      const recentMatches = latestComparableRows(matches);
+      return recentMatches.length ? { ...component, row: medianRow(recentMatches) } : null;
     }).filter(Boolean);
     const values = (field) => present.reduce((sum, component) => sum + component.row[field], 0);
     const coverage = present.length / components.length;
@@ -154,6 +157,12 @@ function selectedBasketRows() {
       complete: present.length === components.length,
     };
   }).filter((row) => row.complete);
+}
+
+function latestComparableRows(rows) {
+  if (!rows.length) return [];
+  const latestDate = rows.reduce((latest, row) => row.metricDate > latest ? row.metricDate : latest, "");
+  return rows.filter((row) => row.metricDate === latestDate);
 }
 
 function renderMetrics(rows) {
@@ -234,11 +243,21 @@ function render() {
   const rows = selectedRows();
   if (!rows.length) {
     table.innerHTML = `<tr><td colspan="5">No rows match the current filters.</td></tr>`;
+    const basketMode = viewFilter.value !== "item";
+    document.querySelector("#median-label").textContent = basketMode ? (viewFilter.value === "custom" ? "Custom basket cost" : "Reference basket cost") : "Median item price";
+    document.querySelector("#min-label").textContent = basketMode ? "Cheapest complete basket" : "Lowest observed item";
+    document.querySelector("#max-label").textContent = basketMode ? "Most expensive complete basket" : "Highest observed item";
     document.querySelector("#median-value").textContent = "—";
     document.querySelector("#min-value").textContent = "—";
     document.querySelector("#max-value").textContent = "—";
     document.querySelector("#areas-value").textContent = "0";
     document.querySelector(".signal-number").textContent = "—";
+    document.querySelector(".insight-panel h2").textContent = basketMode ? "No complete basket yet" : "No matching observations";
+    document.querySelector(".signal-copy").textContent = basketMode
+      ? "The source has daily observations, but no selected area has every item in this basket across the latest seven-day window. Try Monthly view or adjust the filters."
+      : "There are no observations for the selected item and area. Try another filter or period.";
+    document.querySelector("#table-title").textContent = basketMode ? "Basket availability" : "No matching observations";
+    table.innerHTML = `<tr><td colspan="5">${basketMode ? "Daily data is available, but no area has a complete reference basket in the latest seven-day window." : "No rows match the current filters."}</td></tr>`;
     return;
   }
   renderMetrics(rows);
@@ -291,8 +310,8 @@ document.querySelector("#period-filter").addEventListener("change", (event) => {
   const actualPeriod = requestedPeriod === "daily" && !datasets.daily.length ? "monthly" : requestedPeriod;
   event.target.value = actualPeriod;
   observations = supabaseLoaded ? (datasets[actualPeriod] || []) : [...demoObservations];
-  document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Daily item prices";
-  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest day";
+  document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Latest available prices";
+  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
   populateFilters();
   render();
 });
@@ -336,8 +355,8 @@ document.querySelector("#reset-filters").addEventListener("click", () => {
   const actualPeriod = datasets.daily.length ? "daily" : datasets.monthly.length ? "monthly" : "daily";
   periodFilter.value = actualPeriod;
   observations = supabaseLoaded ? (datasets[actualPeriod] || []) : [...demoObservations];
-  document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Daily item prices";
-  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest day";
+  document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Latest available prices";
+  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
   render();
 });
 document.querySelector("#download-button").addEventListener("click", () => {
@@ -397,6 +416,7 @@ async function supabaseGetAll(path, pageSize = 1000) {
 
 function toRows(rows, itemNames) {
   return rows.map((row) => ({
+    metricDate: row.metric_date || row.metric_month || "",
     state: row.state,
     district: row.district || "",
     areaLevel: row.area_level,
@@ -420,7 +440,10 @@ async function loadSupabaseData() {
   const latestMonthly = await supabaseGet("monthly_item_area_summary?select=metric_month&area_level=eq.state&order=metric_month.desc&limit=1");
   const dailyDate = latestDaily[0]?.metric_date;
   const monthlyDate = latestMonthly[0]?.metric_month;
-  const daily = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=eq.${dailyDate}&order=state.asc,item_code.asc`) : [];
+  const dailyStart = dailyDate ? new Date(`${dailyDate}T00:00:00Z`) : null;
+  if (dailyStart) dailyStart.setUTCDate(dailyStart.getUTCDate() - 6);
+  const dailyStartDate = dailyStart ? dailyStart.toISOString().slice(0, 10) : "";
+  const daily = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDate}&metric_date=lte.${dailyDate}&order=metric_date.asc,state.asc,item_code.asc`) : [];
   const monthly = monthlyDate ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc`) : [];
   if (!daily.length && !monthly.length) return;
   const districtTable = dailyDate ? "daily_item_area_summary" : "monthly_item_area_summary";
@@ -432,8 +455,8 @@ async function loadSupabaseData() {
   const periodFilter = document.querySelector("#period-filter");
   if (periodFilter.value === "daily" && !datasets.daily.length) periodFilter.value = "monthly";
   observations = datasets[periodFilter.value];
-  document.querySelector(".hero-note strong").textContent = periodFilter.value === "monthly" ? "Monthly item prices" : "Daily item prices";
-  document.querySelector(".trend-badge").textContent = periodFilter.value === "monthly" ? "Historical month" : "Latest day";
+  document.querySelector(".hero-note strong").textContent = periodFilter.value === "monthly" ? "Monthly item prices" : "Latest available prices";
+  document.querySelector(".trend-badge").textContent = periodFilter.value === "monthly" ? "Historical month" : "Latest 7 days";
   districts = {};
   districtLookup.forEach((row) => {
     if (row.district) districts[row.state] = [...new Set([...(districts[row.state] || []), row.district])];
@@ -444,7 +467,7 @@ async function loadSupabaseData() {
   populateFilters();
   render();
   const banner = document.querySelector(".demo-banner span:last-child");
-  banner.textContent = `Connected to Supabase · ${dailyDate ? `daily ${dailyDate}` : "daily summary pending"} · ${monthlyDate ? `monthly ${monthlyDate}` : "monthly summary pending"}`;
+  banner.textContent = `Connected to Supabase · latest daily window through ${dailyDate || "pending"} · ${monthlyDate ? `monthly ${monthlyDate}` : "monthly summary pending"}`;
 }
 
 loadSupabaseData().catch((error) => {
