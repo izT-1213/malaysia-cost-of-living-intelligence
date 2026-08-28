@@ -215,14 +215,24 @@ def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], st
         response = httpx.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
             params={"key": api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"responseMimeType": "application/json", "temperature": 0.3},
+            },
             timeout=30,
         )
         response.raise_for_status()
         text = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        bundle = json.loads(text.replace("```json", "").replace("```", "").strip())
+        cleaned = text.replace("```json", "").replace("```", "").strip()
+        if not cleaned.startswith("{"):
+            cleaned = cleaned[cleaned.find("{"):cleaned.rfind("}") + 1]
+        bundle = json.loads(cleaned)
         if not isinstance(bundle.get("general"), str) or not isinstance(bundle.get("states"), dict):
             raise ValueError("Invalid insight bundle")
         return {"general": bundle["general"], "states": bundle["states"]}, "gemini", model
-    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+    except httpx.HTTPStatusError as error:
+        print(f"Gemini insight request failed with HTTP {error.response.status_code}; using rule_based fallback.")
+        return fallback, "rule_based", None
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as error:
+        print(f"Gemini insight response was unusable ({type(error).__name__}); using rule_based fallback.")
         return fallback, "rule_based", None
