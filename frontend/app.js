@@ -78,7 +78,8 @@ function stateRowsForInsight() {
 
 function showStateInsight(state) {
   const rows = stateRowsForInsight().filter((row) => row.state === state);
-  const median = rows.length ? rows.reduce((sum, row) => sum + row.median, 0) / rows.length : null;
+  const storedValue = aiInsightBundle.states?.find?.((row) => row.state === state)?.basket_median;
+  const median = storedValue ?? (rows.length ? rows.reduce((sum, row) => sum + row.median, 0) / rows.length : null);
   document.querySelector("#state-detail-name").textContent = state || "Select a state";
   document.querySelector("#state-detail-value").textContent = median === null ? "—" : money(median);
   document.querySelector("#state-detail-copy").textContent = aiInsightBundle.state_insights?.[state] || aiInsightBundle.states?.[state] || "No stored state insight is available for this selection yet.";

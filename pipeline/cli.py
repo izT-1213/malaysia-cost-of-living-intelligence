@@ -167,7 +167,8 @@ def main() -> None:
         )
         premise_daily = summarize_item_premise(recent_window(enriched, as_of, days=7))
         premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
-        insight_payload = build_daily_insight_payload(daily, as_of)
+        item_lookup_frame = pl.read_parquet(item_result.destination)
+        insight_payload = build_daily_insight_payload(daily, as_of, item_lookup_frame)
         insight_bundle, insight_provider, insight_model = generate_insight_bundle(insight_payload)
         load_ai_insight(client, as_of, {**insight_payload, "state_insights": insight_bundle["states"]}, insight_bundle["general"], insight_provider, insight_model)
         print(
