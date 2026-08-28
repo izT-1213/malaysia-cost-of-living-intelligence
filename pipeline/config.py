@@ -14,6 +14,7 @@ load_dotenv()
 class Settings:
     supabase_url: str
     supabase_key: str
+    store_raw_observations: bool = False
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -22,4 +23,7 @@ class Settings:
         missing = [name for name, value in (("SUPABASE_URL", url), ("SUPABASE_KEY", key)) if not value]
         if missing:
             raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
-        return cls(supabase_url=url, supabase_key=key)
+        store_raw = os.getenv("STORE_RAW_OBSERVATIONS", "false").strip().lower() in {
+            "1", "true", "yes"
+        }
+        return cls(supabase_url=url, supabase_key=key, store_raw_observations=store_raw)

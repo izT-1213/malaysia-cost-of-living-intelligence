@@ -91,6 +91,11 @@ def delete_observations_before(client: Client, cutoff: date) -> None:
     client.table("price_observations").delete().lt("observed_date", cutoff.isoformat()).execute()
 
 
+def delete_premise_summaries_before(client: Client, cutoff: date) -> None:
+    """Remove premise summaries older than the seven-day serving window."""
+    client.table("daily_item_premise_summary").delete().lt("metric_date", cutoff.isoformat()).execute()
+
+
 def load_item_area_summary(
     client: Client,
     frame: pl.DataFrame,
