@@ -7,7 +7,7 @@ from pipeline.ingestion.pricecatcher import monthly_url
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
 from pipeline.quality.pricecatcher import validate_observations
 from pipeline.storage.supabase import load_item_area_summary
-from pipeline.summaries.pricecatcher import summarize_item_area
+from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise
 from pipeline.summaries.windows import combined_source_hash, previous_month, recent_window
 from pipeline.transforms.enrich import enrich_observations
 from pipeline.transforms.pricecatcher import normalize_columns
@@ -124,6 +124,17 @@ def test_monthly_summary_uses_month_start_and_deterministic_ties():
     district = result.filter(pl.col("area_level") == "district").row(0, named=True)
     assert district["metric_month"] == date(2026, 8, 1)
     assert district["min_premise_code"] == 2254
+
+
+def test_premise_summary_keeps_each_premise_and_item_separate():
+    frame = pl.DataFrame({
+        "date": [date(2026, 8, 19)] * 3,
+        "item_id": [115, 115, 116],
+        "premise_id": [2254, 2254, 2254],
+        "price": [12.0, 14.0, 5.0],
+    })
+    result = summarize_item_premise(frame)
+    assert result.select("premise_code", "item_code", "median_price").rows() == [(2254, 115, 13.0), (2254, 116, 5.0)]
 
 
 class _FakeTable:

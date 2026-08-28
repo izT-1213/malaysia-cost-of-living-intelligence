@@ -45,6 +45,7 @@ def summarize_item_area(
             & pl.col("state").is_not_null()
         )
     )
+
     if base.is_empty():
         return _empty_summary(period)
 
@@ -72,6 +73,44 @@ def summarize_item_area(
         pl.concat(outputs, how="diagonal_relaxed")
         .select(_summary_columns(period_column))
         .sort([period_column, "area_level", "state", "district", "item_code"])
+    )
+
+
+def summarize_item_premise(frame: pl.DataFrame) -> pl.DataFrame:
+    """Summarize daily prices by premise and item for the rolling detail window."""
+    required = {"date", "item_id", "premise_id", "price"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"Missing premise summary columns: {', '.join(sorted(missing))}")
+    base = (
+        frame.select("date", "item_id", "premise_id", "price")
+        .with_columns(
+            pl.col("date").cast(pl.Date, strict=False),
+            pl.col("item_id").cast(pl.Int64, strict=False),
+            pl.col("premise_id").cast(pl.Int64, strict=False),
+            pl.col("price").cast(pl.Float64, strict=False),
+        )
+        .filter(
+            pl.col("date").is_not_null()
+            & pl.col("item_id").is_not_null()
+            & pl.col("premise_id").is_not_null()
+            & pl.col("price").is_not_null()
+            & (pl.col("price") > 0)
+        )
+    )
+    if base.is_empty():
+        return pl.DataFrame(schema={
+            "metric_date": pl.Date, "premise_code": pl.Int64, "item_code": pl.Int64,
+            "min_price": pl.Float64, "median_price": pl.Float64, "max_price": pl.Float64,
+        })
+    return base.with_columns(pl.col("date").alias("metric_date")).group_by(
+        ["metric_date", "premise_id", "item_id"]
+    ).agg(
+        pl.col("price").min().alias("min_price"),
+        pl.col("price").median().alias("median_price"),
+        pl.col("price").max().alias("max_price"),
+    ).rename({"premise_id": "premise_code", "item_id": "item_code"}).sort(
+        ["metric_date", "premise_code", "item_code"]
     )
 
 

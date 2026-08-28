@@ -49,8 +49,12 @@ const customCategory = document.querySelector("#custom-category");
 const customItem = document.querySelector("#custom-item");
 const customQuantity = document.querySelector("#custom-quantity");
 const customBasketList = document.querySelector("#custom-basket-list");
+const customStateFilter = document.querySelector("#custom-state-filter");
+const customDistrictFilter = document.querySelector("#custom-district-filter");
 let availableItems = [];
 let customBasket = [];
+let premiseLookup = [];
+let premiseObservations = [];
 
 function replaceOptions(select, values) {
   const first = select.querySelector("option").cloneNode(true);
@@ -75,11 +79,30 @@ function renderCustomBuilder() {
 
 function populateCustomItemOptions() {
   const category = customCategory.value;
-  const filtered = availableItems.filter((item) => category === "all" || item.item_category === category);
+  const filtered = availableCustomItems().filter((item) => category === "all" || item.item_category === category);
   customItem.replaceChildren(new Option("Choose an item", ""));
   filtered.sort((a, b) => a.item.localeCompare(b.item)).forEach((item) => {
     customItem.add(new Option(`${item.item} · ${item.unit}`, String(item.item_code)));
   });
+}
+
+function availableCustomItems() {
+  const observedCodes = new Set(observations.map((row) => String(row.itemCode)).filter(Boolean));
+  return supabaseLoaded && observedCodes.size
+    ? availableItems.filter((item) => observedCodes.has(String(item.item_code)))
+    : availableItems;
+}
+
+function populateCustomLocationFilters() {
+  const observedPremises = new Set(premiseObservations.map((row) => String(row.premiseCode)));
+  const locations = premiseLookup.filter((row) => observedPremises.has(String(row.premise_code)));
+  const selectedState = customStateFilter.value;
+  const selectedDistrict = customDistrictFilter.value;
+  replaceOptions(customStateFilter, locations.map((row) => row.state));
+  customStateFilter.value = locations.some((row) => row.state === selectedState) ? selectedState : "all";
+  const districtsForState = locations.filter((row) => customStateFilter.value === "all" || row.state === customStateFilter.value).map((row) => row.district);
+  replaceOptions(customDistrictFilter, districtsForState);
+  customDistrictFilter.value = districtsForState.includes(selectedDistrict) ? selectedDistrict : "all";
 }
 
 function populateFilters() {
@@ -159,6 +182,29 @@ function selectedBasketRows() {
   }).filter((row) => row.complete);
 }
 
+function selectedCustomPremiseRows() {
+  if (!customBasket.length || !premiseObservations.length) return [];
+  const candidates = premiseObservations.filter((row) =>
+    (customStateFilter.value === "all" || row.state === customStateFilter.value)
+    && (customDistrictFilter.value === "all" || row.district === customDistrictFilter.value)
+  );
+  const grouped = new Map();
+  candidates.forEach((row) => {
+    const area = grouped.get(row.premiseCode) || { premiseCode: row.premiseCode, state: row.state, district: row.district, components: new Map() };
+    const itemRows = area.components.get(String(row.itemCode)) || [];
+    itemRows.push(row);
+    area.components.set(String(row.itemCode), itemRows);
+    grouped.set(row.premiseCode, area);
+  });
+  return [...grouped.values()].map((area) => {
+    const components = customBasket.map((item) => latestComparableRows(area.components.get(String(item.itemCode)) || []));
+    if (components.some((rows) => !rows.length)) return null;
+    const median = components.reduce((sum, rows, index) => sum + medianOf(rows.map((row) => row.median)) * customBasket[index].quantity, 0);
+    const premise = premiseLookup.find((row) => String(row.premise_code) === String(area.premiseCode));
+    return { ...area, premise: premise?.premise || `Premise ${area.premiseCode}`, median };
+  }).filter(Boolean).sort((a, b) => a.median - b.median);
+}
+
 function latestComparableRows(rows) {
   if (!rows.length) return [];
   const latestDate = rows.reduce((latest, row) => row.metricDate > latest ? row.metricDate : latest, "");
@@ -206,6 +252,31 @@ function resolveBasketComponents(items) {
 
 function renderTable(rows) {
   const areaLabel = districtFilter.value === "all" ? "state" : "district";
+  const basketMode = viewFilter.value !== "item";
+  if (basketMode) {
+    const overallMedian = medianOf(rows.map((row) => row.median));
+    const grouped = rows.map((row) => ({
+      name: areaLabel === "district" ? row.district : row.state,
+      median: row.median,
+      difference: row.median - overallMedian,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+    document.querySelector("#table-title").textContent = areaLabel === "state" ? "Basket cost by state" : "Basket cost by district";
+    document.querySelector("#area-column").textContent = areaLabel === "state" ? "State" : "District";
+    document.querySelector("#median-column").textContent = "Basket cost";
+    document.querySelector("#lowest-column").textContent = "Vs. overall median";
+    document.querySelector("#highest-column").textContent = "Items";
+    document.querySelector("#range-column").textContent = "Window";
+    const componentCount = viewFilter.value === "custom" ? customBasket.length : basketComponents.length;
+    table.innerHTML = grouped.map((row) => `
+      <tr>
+        <th scope="row">${row.name}</th>
+        <td>${money(row.median)}</td>
+        <td>${row.difference === 0 ? "—" : `${row.difference > 0 ? "+" : "−"}${money(Math.abs(row.difference))}`}</td>
+        <td>${componentCount}/${componentCount}</td>
+        <td>Latest 7 days</td>
+      </tr>`).join("");
+    return;
+  }
   const grouped = [...rows.reduce((groups, row) => {
     const key = areaLabel === "district" ? row.district : row.state;
     const group = groups.get(key) || { name: key, medians: [], min: Infinity, max: -Infinity };
@@ -221,6 +292,11 @@ function renderTable(rows) {
     return { ...group, median };
   }).sort((a, b) => a.name.localeCompare(b.name));
   document.querySelector("#table-title").textContent = areaLabel === "state" ? "Prices by state" : "Prices by district";
+  document.querySelector("#area-column").textContent = areaLabel === "state" ? "State" : "District";
+  document.querySelector("#median-column").textContent = "Median";
+  document.querySelector("#lowest-column").textContent = "Lowest";
+  document.querySelector("#highest-column").textContent = "Highest";
+  document.querySelector("#range-column").textContent = "Range";
   table.innerHTML = grouped.map((row) => `
     <tr>
       <th scope="row">${row.name}</th>
@@ -295,7 +371,7 @@ function renderCustomResults(rows) {
     ["Most expensive basket", expensive.median, expensive.district || expensive.state],
     ["Basket spread", expensive.median - cheapest.median, "Cheapest to most expensive"],
   ].map(([label, value, caption]) => `<article class="metric-card"><span class="metric-label">${label}</span><strong>${money(value)}</strong><span class="metric-caption">${caption}</span></article>`).join("");
-  target.querySelector("#custom-result-table").innerHTML = rows.sort((a, b) => a.median - b.median).map((row) => `<tr><th>${row.district || row.state}</th><td>${money(row.median)}</td></tr>`).join("");
+  target.querySelector("#custom-result-table").innerHTML = rows.map((row) => `<tr><th>${row.premise}</th><td>${row.district || row.state}</td><td>${money(row.median)}</td></tr>`).join("");
 }
 
 populateFilters();
@@ -310,6 +386,8 @@ document.querySelector("#period-filter").addEventListener("change", (event) => {
   const actualPeriod = requestedPeriod === "daily" && !datasets.daily.length ? "monthly" : requestedPeriod;
   event.target.value = actualPeriod;
   observations = supabaseLoaded ? (datasets[actualPeriod] || []) : [...demoObservations];
+  replaceOptions(customCategory, availableCustomItems().map((item) => item.item_category));
+  populateCustomItemOptions();
   document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Latest available prices";
   document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
   populateFilters();
@@ -339,13 +417,17 @@ document.querySelector("#generate-custom-basket").addEventListener("click", () =
     return;
   }
   viewFilter.value = "custom";
-  renderCustomResults(selectedBasketRows());
+  renderCustomResults(selectedCustomPremiseRows());
 });
+customStateFilter.addEventListener("change", () => { populateCustomLocationFilters(); renderCustomResults(selectedCustomPremiseRows()); });
+customDistrictFilter.addEventListener("change", () => renderCustomResults(selectedCustomPremiseRows()));
 document.querySelector("#reset-filters").addEventListener("click", () => {
   stateFilter.value = "all";
   districtFilter.value = "all";
   itemFilter.value = "all";
   viewFilter.value = "basket";
+  customStateFilter.value = "all";
+  customDistrictFilter.value = "all";
   itemFilter.disabled = true;
   customBasket = [];
   customBasketPanel.hidden = true;
@@ -355,6 +437,9 @@ document.querySelector("#reset-filters").addEventListener("click", () => {
   const actualPeriod = datasets.daily.length ? "daily" : datasets.monthly.length ? "monthly" : "daily";
   periodFilter.value = actualPeriod;
   observations = supabaseLoaded ? (datasets[actualPeriod] || []) : [...demoObservations];
+  replaceOptions(customCategory, availableCustomItems().map((item) => item.item_category));
+  populateCustomItemOptions();
+  populateCustomLocationFilters();
   document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Latest available prices";
   document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
   render();
@@ -444,6 +529,13 @@ async function loadSupabaseData() {
   if (dailyStart) dailyStart.setUTCDate(dailyStart.getUTCDate() - 6);
   const dailyStartDate = dailyStart ? dailyStart.toISOString().slice(0, 10) : "";
   const daily = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDate}&metric_date=lte.${dailyDate}&order=metric_date.asc,state.asc,item_code.asc`) : [];
+  let premiseDaily = [];
+  try {
+    premiseLookup = await supabaseGetAll("premise_lookup?select=premise_code,premise,state,district&order=premise_code.asc");
+    premiseDaily = dailyDate ? await supabaseGetAll(`daily_item_premise_summary?select=metric_date,premise_code,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDate}&metric_date=lte.${dailyDate}&order=metric_date.asc,premise_code.asc,item_code.asc`) : [];
+  } catch (error) {
+    console.warn("Premise comparison is not available until migration 004 is applied.", error);
+  }
   const monthly = monthlyDate ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc`) : [];
   if (!daily.length && !monthly.length) return;
   const districtTable = dailyDate ? "daily_item_area_summary" : "monthly_item_area_summary";
@@ -451,10 +543,23 @@ async function loadSupabaseData() {
   const districtLookup = await supabaseGetAll(`${districtTable}?select=state,district&area_level=eq.district&${districtDateFilter}&order=state.asc,district.asc`);
   datasets.daily = toRows(daily, itemNames);
   datasets.monthly = toRows(monthly, itemNames);
+  premiseObservations = premiseDaily.map((row) => ({
+    metricDate: row.metric_date,
+    premiseCode: row.premise_code,
+    itemCode: row.item_code,
+    state: premiseLookup.find((premise) => String(premise.premise_code) === String(row.premise_code))?.state || "",
+    district: premiseLookup.find((premise) => String(premise.premise_code) === String(row.premise_code))?.district || "",
+    median: Number(row.median_price),
+    min: Number(row.min_price),
+    max: Number(row.max_price),
+  }));
   supabaseLoaded = true;
   const periodFilter = document.querySelector("#period-filter");
   if (periodFilter.value === "daily" && !datasets.daily.length) periodFilter.value = "monthly";
   observations = datasets[periodFilter.value];
+  replaceOptions(customCategory, availableCustomItems().map((item) => item.item_category));
+  populateCustomItemOptions();
+  populateCustomLocationFilters();
   document.querySelector(".hero-note strong").textContent = periodFilter.value === "monthly" ? "Monthly item prices" : "Latest available prices";
   document.querySelector(".trend-badge").textContent = periodFilter.value === "monthly" ? "Historical month" : "Latest 7 days";
   districts = {};

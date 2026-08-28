@@ -146,6 +146,23 @@ def load_item_area_summary(
     return submitted
 
 
+def load_item_premise_summary(client: Client, frame: pl.DataFrame, source_sha256: str, batch_size: int = 500) -> int:
+    """Upsert compact daily item-premise summaries."""
+    required = {"metric_date", "premise_code", "item_code", "min_price", "median_price", "max_price"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"Missing premise summary columns: {', '.join(sorted(missing))}")
+    rows = [
+        {**row, "metric_date": row["metric_date"].isoformat(), "source_snapshot_sha256": source_sha256}
+        for row in frame.select(sorted(required)).to_dicts()
+    ]
+    submitted = 0
+    for batch in _chunks(rows, batch_size):
+        client.table("daily_item_premise_summary").upsert(batch, on_conflict="metric_date,premise_code,item_code").execute()
+        submitted += len(batch)
+    return submitted
+
+
 def load_source_snapshot(client: Client, metadata: dict[str, Any]) -> int:
     """Upsert one source snapshot metadata record."""
     row = {

@@ -16,9 +16,10 @@ from pipeline.storage.supabase import (
     load_item_area_summary,
     load_lookup,
     load_observations,
+    load_item_premise_summary,
     load_source_snapshot,
 )
-from pipeline.summaries.pricecatcher import summarize_item_area
+from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise
 from pipeline.summaries.windows import (
     combined_source_hash,
     previous_month,
@@ -156,9 +157,11 @@ def main() -> None:
         daily_count = load_item_area_summary(
             client, daily, "daily_item_area_summary", source_hash, args.batch_size
         )
+        premise_daily = summarize_item_premise(enriched)
+        premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
         print(
             f"Daily summary load complete: {item_count:,} items, {premise_count:,} premises, "
-            f"{daily_count:,} summaries across {args.days} days"
+            f"{daily_count:,} area summaries and {premise_summary_count:,} premise summaries across {args.days} days"
         )
     elif args.command == "backfill-month":
         raw_dir = Path(args.raw_dir)
