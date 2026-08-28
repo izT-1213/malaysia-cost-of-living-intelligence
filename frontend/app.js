@@ -23,16 +23,62 @@ const trend = [11.7, 12.1, 12.0, 12.6, 12.3, 12.8, 12.4];
 const money = (value) => `RM ${value.toFixed(2)}`;
 const config = window.PRICE_LENS_CONFIG || {};
 
+// Components are resolved from approved category/name/unit rules. Similar
+// variants may contribute, but incompatible pack sizes never get mixed.
+const basketRules = [
+  { label: "Rice", category: "BERAS", unit: "10 kg", name: (value) => value.startsWith("BERAS ") },
+  { label: "Standard chicken", category: "AYAM", unit: "1kg", name: (value) => value.includes("AYAM BERSIH") },
+  { label: "Chicken eggs", category: "TELUR", unit: "30 biji", name: (value) => value.includes("TELUR AYAM GRED") },
+  { label: "Cooking oil", category: "MINYAK DAN LEMAK", unit: "1kg", name: (value) => value.startsWith("MINYAK MASAK") },
+  { label: "White sugar", category: "GULA", unit: "1kg", name: (value) => value.startsWith("GULA PUTIH") },
+  { label: "Wheat flour", category: "TEPUNG", unit: "1kg", name: (value) => value.includes("TEPUNG GANDUM") },
+  { label: "Fresh milk", category: "TERSEDIA MINUM", unit: "1 liter", name: (value) => value.startsWith("SUSU SEGAR") },
+  { label: "Yellow onions", category: "BAWANG", unit: "1kg", name: (value) => value.startsWith("BAWANG BESAR") },
+  { label: "Potatoes", category: "UBI KENTANG", unit: "1kg", name: () => true },
+];
+let basketComponents = [];
+
 const stateFilter = document.querySelector("#state-filter");
 const districtFilter = document.querySelector("#district-filter");
 const itemFilter = document.querySelector("#item-filter");
+const viewFilter = document.querySelector("#view-filter");
 const table = document.querySelector("#state-table");
+itemFilter.disabled = true;
+const customBasketPanel = document.querySelector("#custom-basket");
+const customCategory = document.querySelector("#custom-category");
+const customItem = document.querySelector("#custom-item");
+const customQuantity = document.querySelector("#custom-quantity");
+const customBasketList = document.querySelector("#custom-basket-list");
+let availableItems = [];
+let customBasket = [];
 
 function replaceOptions(select, values) {
   const first = select.querySelector("option").cloneNode(true);
   select.replaceChildren(first);
   [...new Set(values)].filter(Boolean).sort().forEach((value) => {
     select.insertAdjacentHTML("beforeend", `<option value="${value}">${value}</option>`);
+  });
+}
+
+function renderCustomBuilder() {
+  customBasketList.innerHTML = customBasket.length
+    ? customBasket.map((entry, index) => `<span class="custom-basket-chip">${entry.item} × ${entry.quantity} ${entry.unit}<button type="button" data-remove-basket-index="${index}" aria-label="Remove ${entry.item}">×</button></span>`).join("")
+    : "<span>No items added yet.</span>";
+  customBasketList.querySelectorAll("[data-remove-basket-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      customBasket.splice(Number(button.dataset.removeBasketIndex), 1);
+      renderCustomBuilder();
+      render();
+    });
+  });
+}
+
+function populateCustomItemOptions() {
+  const category = customCategory.value;
+  const filtered = availableItems.filter((item) => category === "all" || item.item_category === category);
+  customItem.replaceChildren(new Option("Choose an item", ""));
+  filtered.sort((a, b) => a.item.localeCompare(b.item)).forEach((item) => {
+    customItem.add(new Option(`${item.item} · ${item.unit}`, String(item.item_code)));
   });
 }
 
@@ -59,27 +105,94 @@ function populateFilters() {
 }
 
 function selectedRows() {
+  if (viewFilter.value === "basket") return selectedBasketRows();
   return observations.filter((row) => {
     const stateMatches = stateFilter.value === "all" || row.state === stateFilter.value;
     const itemMatches = itemFilter.value === "all" || row.item === itemFilter.value;
-    const districtMatches = districtFilter.value === "all" || (districts[row.state] || []).includes(districtFilter.value);
+    const districtMatches = districtFilter.value === "all" || row.district === districtFilter.value;
     const levelMatches = !row.areaLevel || row.areaLevel === (districtFilter.value === "all" ? "state" : "district");
     return stateMatches && itemMatches && districtMatches && levelMatches;
   });
 }
 
+function selectedBasketRows() {
+  const components = viewFilter.value === "custom"
+    ? customBasket.map((item) => ({ ...item, itemCodes: [item.itemCode] }))
+    : basketComponents;
+  if (!components.length) return [];
+  const level = districtFilter.value === "all" ? "state" : "district";
+  const candidates = observations.filter((row) => {
+    if (row.areaLevel && row.areaLevel !== level) return false;
+    if (stateFilter.value !== "all" && row.state !== stateFilter.value) return false;
+    if (districtFilter.value !== "all" && row.district !== districtFilter.value) return false;
+    return true;
+  });
+  const grouped = new Map();
+  candidates.forEach((row) => {
+    const key = `${row.state}|${row.district}`;
+    const area = grouped.get(key) || { state: row.state, district: row.district, components: new Map() };
+    area.components.set(String(row.itemCode), row);
+    grouped.set(key, area);
+  });
+  return [...grouped.values()].map((area) => {
+    const present = components.map((component) => {
+      const matches = component.itemCodes.map((code) => area.components.get(String(code))).filter(Boolean);
+      return matches.length ? { ...component, row: medianRow(matches) } : null;
+    }).filter(Boolean);
+    const values = (field) => present.reduce((sum, component) => sum + component.row[field], 0);
+    const coverage = present.length / components.length;
+    return {
+      state: area.state,
+      district: area.district,
+      areaLevel: level,
+      item: "Reference grocery basket",
+      itemCode: null,
+      median: values("median"),
+      min: values("min"),
+      max: values("max"),
+      coverage,
+      complete: present.length === components.length,
+    };
+  }).filter((row) => row.complete);
+}
+
 function renderMetrics(rows) {
-  const median = rows.reduce((sum, row) => sum + row.median, 0) / rows.length;
-  const min = Math.min(...rows.map((row) => row.min));
-  const max = Math.max(...rows.map((row) => row.max));
+  const basketMode = viewFilter.value !== "item";
+  const customMode = viewFilter.value === "custom";
+  const median = basketMode ? medianOf(rows.map((row) => row.median)) : rows.reduce((sum, row) => sum + row.median, 0) / rows.length;
+  const min = basketMode ? Math.min(...rows.map((row) => row.median)) : Math.min(...rows.map((row) => row.min));
+  const max = basketMode ? Math.max(...rows.map((row) => row.median)) : Math.max(...rows.map((row) => row.max));
+  document.querySelector("#median-label").textContent = basketMode ? (customMode ? "Custom basket cost" : "Reference basket cost") : "Median item price";
+  document.querySelector("#min-label").textContent = basketMode ? "Cheapest complete basket" : "Lowest observed item";
+  document.querySelector("#max-label").textContent = basketMode ? "Most expensive complete basket" : "Highest observed item";
   document.querySelector("#median-value").textContent = money(median);
   document.querySelector("#min-value").textContent = money(min);
   document.querySelector("#max-value").textContent = money(max);
   const areaNames = new Set(rows.map((row) => districtFilter.value === "all" ? row.state : row.district));
   document.querySelector("#areas-value").textContent = areaNames.size;
-  document.querySelector("#median-caption").textContent = rows.length === 1 ? rows[0].state : "Across selected areas";
-  document.querySelector("#min-caption").textContent = rows.find((row) => row.min === min)?.state || "Selected area";
-  document.querySelector("#max-caption").textContent = rows.find((row) => row.max === max)?.state || "Selected area";
+  document.querySelector("#median-caption").textContent = rows.length === 1 ? (districtFilter.value === "all" ? rows[0].state : rows[0].district) : "Across selected areas";
+  const areaField = districtFilter.value === "all" ? "state" : "district";
+  document.querySelector("#min-caption").textContent = rows.find((row) => (basketMode ? row.median : row.min) === min)?.[areaField] || "Selected area";
+  document.querySelector("#max-caption").textContent = rows.find((row) => (basketMode ? row.median : row.max) === max)?.[areaField] || "Selected area";
+}
+
+function medianOf(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function medianRow(rows) {
+  return ["median", "min", "max"].reduce((result, field) => ({ ...result, [field]: medianOf(rows.map((row) => row[field])) }), {});
+}
+
+function resolveBasketComponents(items) {
+  return basketRules.map((rule) => ({
+    ...rule,
+    itemCodes: items
+      .filter((item) => item.item_category === rule.category && item.unit.trim().toLowerCase() === rule.unit.toLowerCase() && rule.name(item.item.toUpperCase()))
+      .map((item) => item.item_code),
+  }));
 }
 
 function renderTable(rows) {
@@ -146,10 +259,33 @@ document.querySelector("#period-filter").addEventListener("change", (event) => {
   populateFilters();
   render();
 });
+viewFilter.addEventListener("change", () => {
+  const basketMode = viewFilter.value !== "item";
+  itemFilter.disabled = basketMode;
+  customBasketPanel.hidden = viewFilter.value !== "custom";
+  populateFilters();
+  render();
+});
+customCategory.addEventListener("change", populateCustomItemOptions);
+document.querySelector("#add-basket-item").addEventListener("click", () => {
+  const item = availableItems.find((entry) => String(entry.item_code) === customItem.value);
+  const quantity = Number(customQuantity.value);
+  if (!item || !Number.isFinite(quantity) || quantity <= 0) return;
+  const existing = customBasket.find((entry) => entry.itemCode === item.item_code);
+  if (existing) existing.quantity += quantity;
+  else customBasket.push({ itemCode: item.item_code, item: item.item, unit: item.unit, quantity });
+  renderCustomBuilder();
+  render();
+});
 document.querySelector("#reset-filters").addEventListener("click", () => {
   stateFilter.value = "all";
   districtFilter.value = "all";
   itemFilter.value = "all";
+  viewFilter.value = "basket";
+  itemFilter.disabled = true;
+  customBasket = [];
+  customBasketPanel.hidden = true;
+  renderCustomBuilder();
   const periodFilter = document.querySelector("#period-filter");
   const actualPeriod = datasets.daily.length ? "daily" : datasets.monthly.length ? "monthly" : "daily";
   periodFilter.value = actualPeriod;
@@ -220,8 +356,12 @@ function toRows(rows, itemNames) {
 
 async function loadSupabaseData() {
   if (!config.url || !config.anonKey || config.anonKey.startsWith("sb_secret_")) return;
-  const items = await supabaseGet("item_lookup?select=item_code,item&order=item.asc&limit=1000");
+  const items = await supabaseGet("item_lookup?select=item_code,item,unit,item_group,item_category&order=item.asc&limit=1000");
+  availableItems = items;
+  replaceOptions(customCategory, items.map((item) => item.item_category));
+  populateCustomItemOptions();
   const itemNames = new Map(items.map((row) => [String(row.item_code), row.item]));
+  basketComponents = resolveBasketComponents(items);
   const latestDaily = await supabaseGet("daily_item_area_summary?select=metric_date&area_level=eq.state&order=metric_date.desc&limit=1");
   const latestMonthly = await supabaseGet("monthly_item_area_summary?select=metric_month&area_level=eq.state&order=metric_month.desc&limit=1");
   const dailyDate = latestDaily[0]?.metric_date;

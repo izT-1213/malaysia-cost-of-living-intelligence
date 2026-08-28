@@ -55,6 +55,13 @@
             </select>
           </label>
           <label>
+            <span>View</span>
+            <select id="view-filter">
+              <option value="basket">Reference basket</option>
+              <option value="item">Individual items</option>
+            </select>
+          </label>
+          <label>
             <span>State</span>
             <select id="state-filter">
               <option value="all">All states</option>
@@ -74,6 +81,20 @@
           <button class="reset-button" id="reset-filters" type="button">Reset filters</button>
         </section>
 
+        <section class="custom-basket" id="custom-basket" hidden aria-label="Custom basket builder">
+          <div>
+            <p class="eyebrow">Build your own comparison</p>
+            <p class="custom-basket-copy">Choose exact tracked items and quantities. Areas missing any selected item are excluded.</p>
+          </div>
+          <div class="basket-builder-controls">
+            <label><span>Category</span><select id="custom-category"><option value="all">All categories</option></select></label>
+            <label><span>Item</span><select id="custom-item"><option value="">Choose an item</option></select></label>
+            <label class="quantity-field"><span>Quantity</span><input id="custom-quantity" type="number" min="0.01" step="0.01" value="1" /></label>
+            <button class="text-button" id="add-basket-item" type="button">Add item</button>
+          </div>
+          <div class="custom-basket-list" id="custom-basket-list"><span>No items added yet.</span></div>
+        </section>
+
         <div class="demo-banner" role="status">
           <span class="demo-icon" aria-hidden="true">i</span>
           <span>This preview uses representative data. The next step is connecting these views to Supabase.</span>
@@ -81,17 +102,17 @@
 
         <section class="metric-grid" aria-label="Key metrics">
           <article class="metric-card metric-card-dark">
-            <span class="metric-label">Median basket price</span>
+              <span class="metric-label" id="median-label">Reference basket cost</span>
             <strong id="median-value">RM 12.40</strong>
             <span class="metric-caption" id="median-caption">Across selected observations</span>
           </article>
           <article class="metric-card">
-            <span class="metric-label">Lowest observed</span>
+              <span class="metric-label" id="min-label">Cheapest complete basket</span>
             <strong id="min-value">RM 8.90</strong>
             <span class="metric-caption" id="min-caption">Selected item and area</span>
           </article>
           <article class="metric-card">
-            <span class="metric-label">Highest observed</span>
+              <span class="metric-label" id="max-label">Most expensive complete basket</span>
             <strong id="max-value">RM 16.80</strong>
             <span class="metric-caption" id="max-caption">Selected item and area</span>
           </article>
