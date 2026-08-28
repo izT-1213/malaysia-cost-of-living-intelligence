@@ -157,9 +157,12 @@ def load_item_premise_summary(client: Client, frame: pl.DataFrame, source_sha256
         for row in frame.select(sorted(required)).to_dicts()
     ]
     submitted = 0
-    for batch in _chunks(rows, batch_size):
+    total_batches = (len(rows) + batch_size - 1) // batch_size
+    for batch_number, batch in enumerate(_chunks(rows, batch_size), start=1):
         client.table("daily_item_premise_summary").upsert(batch, on_conflict="metric_date,premise_code,item_code").execute()
         submitted += len(batch)
+        if batch_number == 1 or batch_number % 10 == 0 or batch_number == total_batches:
+            print(f"Premise summary upload: {submitted:,}/{len(rows):,} rows", flush=True)
     return submitted
 
 
