@@ -137,7 +137,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th scope="col">State</th><th scope="col">Median</th><th scope="col">Lowest</th><th scope="col">Highest</th><th scope="col">Range</th></tr>
+                <tr><th scope="col" id="area-column">State</th><th scope="col" id="median-column">Median</th><th scope="col" id="lowest-column">Lowest</th><th scope="col" id="highest-column">Highest</th><th scope="col" id="range-column">Range</th></tr>
               </thead>
               <tbody id="state-table"></tbody>
             </table>
@@ -152,6 +152,10 @@
             <p>Choose exact tracked items and quantities. When you are ready, generate the same complete-basket comparison used on the dashboard.</p>
           </div>
           <section class="custom-basket" id="custom-basket" aria-label="Custom basket builder">
+            <div class="custom-location-controls">
+              <label><span>State</span><select id="custom-state-filter"><option value="all">All states</option></select></label>
+              <label><span>District</span><select id="custom-district-filter"><option value="all">All districts</option></select></label>
+            </div>
             <div class="basket-builder-controls">
               <label><span>Category</span><select id="custom-category"><option value="all">All categories</option></select></label>
               <label><span>Item</span><select id="custom-item"><option value="">Choose an item</option></select></label>
@@ -162,9 +166,9 @@
             <button class="primary-button" id="generate-custom-basket" type="button">Generate comparison</button>
           </section>
           <section class="custom-results" id="custom-results" hidden>
-            <div class="demo-banner"><span class="demo-icon" aria-hidden="true">i</span><span>Comparison generated from your selected items. Incomplete areas are excluded.</span></div>
+            <div class="demo-banner"><span class="demo-icon" aria-hidden="true">i</span><span>Comparison uses complete baskets at the same premise. Missing items and premises are excluded.</span></div>
             <div class="metric-grid custom-metric-grid"></div>
-            <div class="panel custom-result-panel"><div class="panel-heading"><div><p class="eyebrow">Complete-area comparison</p><h2>Basket prices by area</h2></div></div><div class="table-wrap"><table><thead><tr><th>Area</th><th>Basket cost</th></tr></thead><tbody id="custom-result-table"></tbody></table></div></div>
+            <div class="panel custom-result-panel"><div class="panel-heading"><div><p class="eyebrow">Complete-premise comparison</p><h2>Where can I buy this basket?</h2></div></div><div class="table-wrap"><table><thead><tr><th>Premise</th><th>Location</th><th>Basket cost</th></tr></thead><tbody id="custom-result-table"></tbody></table></div></div>
           </section>
         </section>
 
