@@ -181,7 +181,7 @@ def generate_insight(payload: dict[str, Any]) -> tuple[str, str, str | None]:
     """Return text, provider label, and model without making AI mandatory."""
     provider_name = os.getenv("AI_PROVIDER", "disabled").strip().lower()
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
     if provider_name == "gemini" and api_key:
         try:
             return GeminiInsightProvider(api_key, model).explain(payload), "gemini", model
@@ -194,7 +194,7 @@ def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], st
     """Return a general note and state notes, with a deterministic fallback."""
     provider_name = os.getenv("AI_PROVIDER", "disabled").strip().lower()
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
     fallback = {
         "general": fallback_explanation(payload),
         "states": fallback_state_explanations(payload),
