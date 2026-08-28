@@ -30,11 +30,12 @@ const basketRules = [
   { label: "Standard chicken", category: "AYAM", unit: "1kg", name: (value) => value.includes("AYAM BERSIH") },
   { label: "Chicken eggs", category: "TELUR", unit: "30 biji", name: (value) => value.includes("TELUR AYAM GRED") },
   { label: "Cooking oil", category: "MINYAK DAN LEMAK", unit: "1kg", name: (value) => value.startsWith("MINYAK MASAK") },
-  { label: "White sugar", category: "GULA", unit: "1kg", name: (value) => value.startsWith("GULA PUTIH") },
   { label: "Wheat flour", category: "TEPUNG", unit: "1kg", name: (value) => value.includes("TEPUNG GANDUM") },
-  { label: "Fresh milk", category: "TERSEDIA MINUM", unit: "1 liter", name: (value) => value.startsWith("SUSU SEGAR") },
   { label: "Yellow onions", category: "BAWANG", unit: "1kg", name: (value) => value.startsWith("BAWANG BESAR") },
   { label: "Potatoes", category: "UBI KENTANG", unit: "1kg", name: () => true },
+  { label: "Cabbage", category: "SAYUR-SAYURAN", unit: "1kg", name: (value) => value.startsWith("KUBIS BULAT") },
+  { label: "Tomato", category: "SAYUR-SAYURAN", unit: "1kg", name: (value) => value === "TOMATO" },
+  { label: "Kangkung", category: "SAYUR-SAYURAN", unit: "1kg", name: (value) => value === "KANGKUNG" },
 ];
 let basketComponents = [];
 
