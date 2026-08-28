@@ -56,6 +56,10 @@ let availableItems = [];
 let customBasket = [];
 let premiseLookup = [];
 let premiseObservations = [];
+let premiseDataLoaded = false;
+let premiseDataLoading = false;
+let dailyDateForPremise = "";
+let dailyStartDateForPremise = "";
 
 function replaceOptions(select, values) {
   const first = select.querySelector("option").cloneNode(true);
@@ -95,8 +99,9 @@ function availableCustomItems() {
 }
 
 function populateCustomLocationFilters() {
-  const observedPremises = new Set(premiseObservations.map((row) => String(row.premiseCode)));
-  const locations = premiseLookup.filter((row) => observedPremises.has(String(row.premise_code)));
+  const locations = premiseDataLoaded
+    ? premiseLookup.filter((premise) => premiseObservations.some((row) => String(row.premiseCode) === String(premise.premise_code)))
+    : observations.filter((row) => row.state && row.district).map((row) => ({ state: row.state, district: row.district }));
   const selectedState = customStateFilter.value;
   const selectedDistrict = customDistrictFilter.value;
   replaceOptions(customStateFilter, locations.map((row) => row.state));
@@ -412,10 +417,16 @@ document.querySelector("#add-basket-item").addEventListener("click", () => {
   renderCustomBuilder();
   render();
 });
-document.querySelector("#generate-custom-basket").addEventListener("click", () => {
+document.querySelector("#generate-custom-basket").addEventListener("click", async () => {
   if (!customBasket.length) {
     renderCustomResults([]);
     return;
+  }
+  if (supabaseLoaded && !premiseDataLoaded) {
+    renderCustomResults([]);
+    document.querySelector("#custom-results .custom-basket-copy").textContent = "Loading the selected items across available premises…";
+    await loadPremiseData(customBasket.map((item) => item.itemCode));
+    populateCustomLocationFilters();
   }
   viewFilter.value = "custom";
   renderCustomResults(selectedCustomPremiseRows());
@@ -529,14 +540,9 @@ async function loadSupabaseData() {
   const dailyStart = dailyDate ? new Date(`${dailyDate}T00:00:00Z`) : null;
   if (dailyStart) dailyStart.setUTCDate(dailyStart.getUTCDate() - 6);
   const dailyStartDate = dailyStart ? dailyStart.toISOString().slice(0, 10) : "";
+  dailyDateForPremise = dailyDate || "";
+  dailyStartDateForPremise = dailyStartDate;
   const daily = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDate}&metric_date=lte.${dailyDate}&order=metric_date.asc,state.asc,item_code.asc`) : [];
-  let premiseDaily = [];
-  try {
-    premiseLookup = await supabaseGetAll("premise_lookup?select=premise_code,premise,state,district&order=premise_code.asc");
-    premiseDaily = dailyDate ? await supabaseGetAll(`daily_item_premise_summary?select=metric_date,premise_code,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDate}&metric_date=lte.${dailyDate}&order=metric_date.asc,premise_code.asc,item_code.asc`) : [];
-  } catch (error) {
-    console.warn("Premise comparison is not available until migration 004 is applied.", error);
-  }
   const monthly = monthlyDate ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc`) : [];
   if (!daily.length && !monthly.length) return;
   const districtTable = dailyDate ? "daily_item_area_summary" : "monthly_item_area_summary";
@@ -544,16 +550,6 @@ async function loadSupabaseData() {
   const districtLookup = await supabaseGetAll(`${districtTable}?select=state,district&area_level=eq.district&${districtDateFilter}&order=state.asc,district.asc`);
   datasets.daily = toRows(daily, itemNames);
   datasets.monthly = toRows(monthly, itemNames);
-  premiseObservations = premiseDaily.map((row) => ({
-    metricDate: row.metric_date,
-    premiseCode: row.premise_code,
-    itemCode: row.item_code,
-    state: premiseLookup.find((premise) => String(premise.premise_code) === String(row.premise_code))?.state || "",
-    district: premiseLookup.find((premise) => String(premise.premise_code) === String(row.premise_code))?.district || "",
-    median: Number(row.median_price),
-    min: Number(row.min_price),
-    max: Number(row.max_price),
-  }));
   supabaseLoaded = true;
   const periodFilter = document.querySelector("#period-filter");
   if (periodFilter.value === "daily" && !datasets.daily.length) periodFilter.value = "monthly";
@@ -574,6 +570,36 @@ async function loadSupabaseData() {
   render();
   const banner = document.querySelector(".demo-banner span:last-child");
   banner.textContent = `Connected to Supabase · latest daily window through ${dailyDate || "pending"} · ${monthlyDate ? `monthly ${monthlyDate}` : "monthly summary pending"}`;
+}
+
+async function loadPremiseData(itemCodes) {
+  if (premiseDataLoading || !dailyDateForPremise) return;
+  premiseDataLoading = true;
+  try {
+    premiseLookup = await supabaseGetAll("premise_lookup?select=premise_code,premise,state,district&order=premise_code.asc");
+    const codes = [...new Set(itemCodes.map((code) => Number(code)).filter(Number.isInteger))];
+    const codeFilter = codes.length ? `&item_code=in.(${codes.join(",")})` : "";
+    const premiseDaily = await supabaseGetAll(`daily_item_premise_summary?select=metric_date,premise_code,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDateForPremise}&metric_date=lte.${dailyDateForPremise}${codeFilter}&order=metric_date.asc,premise_code.asc,item_code.asc`);
+    premiseObservations = premiseDaily.map((row) => {
+      const premise = premiseLookup.find((entry) => String(entry.premise_code) === String(row.premise_code));
+      return {
+        metricDate: row.metric_date,
+        premiseCode: row.premise_code,
+        itemCode: row.item_code,
+        state: premise?.state || "",
+        district: premise?.district || "",
+        premise: premise?.premise || "",
+        median: Number(row.median_price),
+        min: Number(row.min_price),
+        max: Number(row.max_price),
+      };
+    });
+    premiseDataLoaded = true;
+  } catch (error) {
+    console.warn("Premise comparison could not be loaded.", error);
+  } finally {
+    premiseDataLoading = false;
+  }
 }
 
 loadSupabaseData().catch((error) => {
