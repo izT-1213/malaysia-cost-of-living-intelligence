@@ -52,7 +52,7 @@ def main() -> None:
     daily_summary_parser.add_argument("--days", type=int, default=30)
     daily_summary_parser.add_argument("--as-of", help="Processing date in YYYY-MM-DD; defaults to today")
     daily_summary_parser.add_argument("--limit", type=int, help="Optional row limit for a small connectivity test")
-    daily_summary_parser.add_argument("--batch-size", type=int, default=500)
+    daily_summary_parser.add_argument("--batch-size", type=int, default=2000)
     backfill_parser = subparsers.add_parser(
         "backfill-month", help="Summarize one complete month and load it into Supabase"
     )
