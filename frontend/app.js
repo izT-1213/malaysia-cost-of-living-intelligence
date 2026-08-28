@@ -223,6 +223,7 @@ function renderTable(rows) {
 }
 
 function renderChart() {
+  if (!document.querySelector("#trend-chart")) return;
   const max = Math.max(...trend);
   const min = Math.min(...trend);
   document.querySelector("#trend-chart").innerHTML = trend.map((value, index) => `
@@ -237,14 +238,50 @@ function render() {
     document.querySelector("#min-value").textContent = "—";
     document.querySelector("#max-value").textContent = "—";
     document.querySelector("#areas-value").textContent = "0";
+    document.querySelector(".signal-number").textContent = "—";
     return;
   }
   renderMetrics(rows);
   renderTable(rows);
+  const basketMode = viewFilter.value !== "item";
+  const low = basketMode ? Math.min(...rows.map((row) => row.median)) : Math.min(...rows.map((row) => row.min));
+  const high = basketMode ? Math.max(...rows.map((row) => row.median)) : Math.max(...rows.map((row) => row.max));
+  document.querySelector(".signal-number").textContent = money(high - low);
+  document.querySelector(".insight-panel h2").textContent = basketMode ? "Basket price spread" : "Item price spread";
+  document.querySelector(".signal-copy").textContent = basketMode
+    ? "Difference between the cheapest and most expensive complete baskets in the current selection."
+    : "Difference between the lowest and highest observed prices in the current selection.";
+}
+
+function renderReferenceBasket() {
+  document.querySelector("#reference-basket-list").innerHTML = basketRules.map((rule) => `<span class="custom-basket-chip">${rule.label}<small>${rule.unit}</small></span>`).join("");
+}
+
+function renderCustomResults(rows) {
+  const target = document.querySelector("#custom-results");
+  target.hidden = false;
+  const grid = target.querySelector(".custom-metric-grid");
+  if (!rows.length) {
+    grid.innerHTML = '<p class="custom-basket-copy">No complete baskets match the current filters.</p>';
+    target.querySelector("#custom-result-table").innerHTML = "";
+    return;
+  }
+  const costs = rows.map((row) => row.median);
+  const median = medianOf(costs);
+  const cheapest = rows.reduce((a, b) => (a.median < b.median ? a : b));
+  const expensive = rows.reduce((a, b) => (a.median > b.median ? a : b));
+  grid.innerHTML = [
+    ["Median basket cost", median, "Across complete areas"],
+    ["Cheapest basket", cheapest.median, cheapest.district || cheapest.state],
+    ["Most expensive basket", expensive.median, expensive.district || expensive.state],
+    ["Basket spread", expensive.median - cheapest.median, "Cheapest to most expensive"],
+  ].map(([label, value, caption]) => `<article class="metric-card"><span class="metric-label">${label}</span><strong>${money(value)}</strong><span class="metric-caption">${caption}</span></article>`).join("");
+  target.querySelector("#custom-result-table").innerHTML = rows.sort((a, b) => a.median - b.median).map((row) => `<tr><th>${row.district || row.state}</th><td>${money(row.median)}</td></tr>`).join("");
 }
 
 populateFilters();
 renderChart();
+renderReferenceBasket();
 render();
 stateFilter.addEventListener("change", () => { populateFilters(); render(); });
 districtFilter.addEventListener("change", render);
@@ -277,6 +314,14 @@ document.querySelector("#add-basket-item").addEventListener("click", () => {
   renderCustomBuilder();
   render();
 });
+document.querySelector("#generate-custom-basket").addEventListener("click", () => {
+  if (!customBasket.length) {
+    renderCustomResults([]);
+    return;
+  }
+  viewFilter.value = "custom";
+  renderCustomResults(selectedBasketRows());
+});
 document.querySelector("#reset-filters").addEventListener("click", () => {
   stateFilter.value = "all";
   districtFilter.value = "all";
@@ -285,6 +330,7 @@ document.querySelector("#reset-filters").addEventListener("click", () => {
   itemFilter.disabled = true;
   customBasket = [];
   customBasketPanel.hidden = true;
+  document.querySelector("#custom-results").hidden = true;
   renderCustomBuilder();
   const periodFilter = document.querySelector("#period-filter");
   const actualPeriod = datasets.daily.length ? "daily" : datasets.monthly.length ? "monthly" : "daily";
@@ -302,7 +348,15 @@ document.querySelectorAll(".nav-button").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll(".nav-button").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
-    document.querySelectorAll("#dashboard-view, #about-view").forEach((view) => { view.hidden = view.id !== button.dataset.view; });
+    document.querySelectorAll("#dashboard-view, #custom-view, #about-view").forEach((view) => { view.hidden = view.id !== button.dataset.view; });
+    if (button.dataset.view === "dashboard-view") {
+      viewFilter.value = "basket";
+      customBasketPanel.hidden = true;
+      render();
+    } else if (button.dataset.view === "custom-view") {
+      viewFilter.value = "custom";
+      customBasketPanel.hidden = false;
+    }
   });
 });
 

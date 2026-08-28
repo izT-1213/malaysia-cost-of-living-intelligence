@@ -19,6 +19,7 @@
         </a>
         <nav class="site-nav" aria-label="Main navigation">
           <button class="nav-button active" type="button" data-view="dashboard-view">Dashboard</button>
+          <button class="nav-button" type="button" data-view="custom-view">Custom basket</button>
           <button class="nav-button" type="button" data-view="about-view">About</button>
         </nav>
         <div class="topbar-meta">
@@ -49,19 +50,6 @@
 
         <section class="controls" aria-label="Dashboard filters">
           <label>
-            <span>Item</span>
-            <select id="item-filter">
-              <option value="all">All tracked items</option>
-            </select>
-          </label>
-          <label>
-            <span>View</span>
-            <select id="view-filter">
-              <option value="basket">Reference basket</option>
-              <option value="item">Individual items</option>
-            </select>
-          </label>
-          <label>
             <span>State</span>
             <select id="state-filter">
               <option value="all">All states</option>
@@ -78,21 +66,14 @@
               <option value="monthly">Monthly view</option>
             </select>
           </label>
+          <select id="item-filter" hidden><option value="all">All tracked items</option></select>
+          <select id="view-filter" hidden><option value="basket">Reference basket</option><option value="custom">Custom basket</option><option value="item">Individual items</option></select>
           <button class="reset-button" id="reset-filters" type="button">Reset filters</button>
         </section>
 
-        <section class="custom-basket" id="custom-basket" hidden aria-label="Custom basket builder">
-          <div>
-            <p class="eyebrow">Build your own comparison</p>
-            <p class="custom-basket-copy">Choose exact tracked items and quantities. Areas missing any selected item are excluded.</p>
-          </div>
-          <div class="basket-builder-controls">
-            <label><span>Category</span><select id="custom-category"><option value="all">All categories</option></select></label>
-            <label><span>Item</span><select id="custom-item"><option value="">Choose an item</option></select></label>
-            <label class="quantity-field"><span>Quantity</span><input id="custom-quantity" type="number" min="0.01" step="0.01" value="1" /></label>
-            <button class="text-button" id="add-basket-item" type="button">Add item</button>
-          </div>
-          <div class="custom-basket-list" id="custom-basket-list"><span>No items added yet.</span></div>
+        <section class="basket-overview" aria-label="Reference basket contents">
+          <div><p class="eyebrow">Reference basket</p><h2>What is included?</h2></div>
+          <div class="basket-chip-list" id="reference-basket-list"></div>
         </section>
 
         <div class="demo-banner" role="status">
@@ -127,13 +108,12 @@
           <article class="panel trend-panel">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">Price movement</p>
-                <h2>Median price trend</h2>
+                <p class="eyebrow">Method</p>
+                <h2>Complete-basket comparison</h2>
               </div>
-              <span class="trend-badge">Last 7 days</span>
+              <span class="trend-badge">No partial baskets</span>
             </div>
-            <div class="chart" id="trend-chart" aria-label="Seven day median price trend"></div>
-            <div class="chart-axis"><span>20 Aug</span><span>26 Aug</span></div>
+            <div class="method-note"><strong>Every area must contain every basket component.</strong><p>We calculate each component's median price, multiply by its selected quantity, and add the components together. Missing items are never treated as zero.</p><div class="method-pills"><span>Exact item codes</span><span>Matched units</span><span>Deterministic totals</span></div></div>
           </article>
 
           <article class="panel insight-panel">
@@ -164,6 +144,29 @@
           </div>
         </section>
         </div>
+
+        <section id="custom-view" class="custom-view" hidden aria-label="Custom basket">
+          <div class="about-intro">
+            <p class="eyebrow">Your basket</p>
+            <h1>Build a basket<br /><em>that fits you.</em></h1>
+            <p>Choose exact tracked items and quantities. When you are ready, generate the same complete-basket comparison used on the dashboard.</p>
+          </div>
+          <section class="custom-basket" id="custom-basket" aria-label="Custom basket builder">
+            <div class="basket-builder-controls">
+              <label><span>Category</span><select id="custom-category"><option value="all">All categories</option></select></label>
+              <label><span>Item</span><select id="custom-item"><option value="">Choose an item</option></select></label>
+              <label class="quantity-field"><span>Quantity</span><input id="custom-quantity" type="number" min="0.01" step="0.01" value="1" /></label>
+              <button class="text-button" id="add-basket-item" type="button">Add item</button>
+            </div>
+            <div class="custom-basket-list" id="custom-basket-list"><span>No items added yet.</span></div>
+            <button class="primary-button" id="generate-custom-basket" type="button">Generate comparison</button>
+          </section>
+          <section class="custom-results" id="custom-results" hidden>
+            <div class="demo-banner"><span class="demo-icon" aria-hidden="true">i</span><span>Comparison generated from your selected items. Incomplete areas are excluded.</span></div>
+            <div class="metric-grid custom-metric-grid"></div>
+            <div class="panel custom-result-panel"><div class="panel-heading"><div><p class="eyebrow">Complete-area comparison</p><h2>Basket prices by area</h2></div></div><div class="table-wrap"><table><thead><tr><th>Area</th><th>Basket cost</th></tr></thead><tbody id="custom-result-table"></tbody></table></div></div>
+          </section>
+        </section>
 
         <section id="about-view" class="about-view" hidden>
           <div class="about-intro">
