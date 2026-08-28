@@ -31,6 +31,18 @@ run manually or on its daily schedule. Add `SUPABASE_URL` and `SUPABASE_KEY` as
 GitHub repository secrets before running it. The job downloads the current
 monthly snapshot and lookup files, then upserts them idempotently into Supabase.
 
+## Public frontend
+
+The `Deploy PriceLens frontend` workflow publishes `frontend/` to GitHub Pages.
+Before the first deployment, add these repository variables under **Settings →
+Secrets and variables → Actions → Variables**:
+
+- `SUPABASE_PUBLIC_URL`: the new project's URL
+- `SUPABASE_PUBLIC_ANON_KEY`: the publishable/anonymous key (never use the service key)
+
+Then enable **Settings → Pages → Source → GitHub Actions**. The site will be
+available at `https://izt-1213.github.io/malaysia-cost-of-living-intelligence/`.
+
 ## Repository map
 
 - `pipeline/` — ingestion, transforms, quality checks, and deterministic metrics
