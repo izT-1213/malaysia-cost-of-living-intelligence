@@ -16,11 +16,12 @@ Current components:
 | Standard chicken | `AYAM`, 1 kg, cleaned chicken items |
 | Chicken eggs | `TELUR`, 30 eggs, Grade A/B/C chicken eggs |
 | Cooking oil | `MINYAK DAN LEMAK`, 1 kg, cooking oil items |
-| White sugar | `GULA`, 1 kg, white sugar items |
 | Wheat flour | `TEPUNG`, 1 kg, wheat flour items |
-| Fresh milk | `TERSEDIA MINUM`, 1 litre, fresh milk items |
 | Yellow onions | `BAWANG`, 1 kg, large yellow onion items |
 | Potatoes | `UBI KENTANG`, 1 kg, potato items |
+| Cabbage | `SAYUR-SAYURAN`, 1 kg, round cabbage items |
+| Tomato | `SAYUR-SAYURAN`, 1 kg, tomato item |
+| Kangkung | `SAYUR-SAYURAN`, 1 kg, kangkung item |
 
 An area is included in basket comparisons only when every component has at
 least one matching observed item. Missing components are never treated as
