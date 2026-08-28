@@ -177,6 +177,29 @@ class GeminiInsightProvider:
         return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
+def log_available_gemini_models(api_key: str) -> None:
+    """Print safe model metadata when the configured model cannot be found."""
+    try:
+        response = httpx.get(
+            "https://generativelanguage.googleapis.com/v1beta/models",
+            params={"key": api_key},
+            timeout=30,
+        )
+        response.raise_for_status()
+        models = response.json().get("models", [])
+        supported = [
+            {
+                "name": model.get("name"),
+                "methods": model.get("supportedGenerationMethods", []),
+            }
+            for model in models
+            if "generateContent" in model.get("supportedGenerationMethods", [])
+        ]
+        print(f"Gemini models supporting generateContent: {json.dumps(supported, separators=(',', ':'))}")
+    except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        print(f"Gemini model discovery failed ({type(error).__name__}); using rule_based fallback.")
+
+
 def generate_insight(payload: dict[str, Any]) -> tuple[str, str, str | None]:
     """Return text, provider label, and model without making AI mandatory."""
     provider_name = os.getenv("AI_PROVIDER", "disabled").strip().lower()
@@ -232,6 +255,8 @@ def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], st
         return {"general": bundle["general"], "states": bundle["states"]}, "gemini", model
     except httpx.HTTPStatusError as error:
         print(f"Gemini insight request failed with HTTP {error.response.status_code}; using rule_based fallback.")
+        if error.response.status_code == 404:
+            log_available_gemini_models(api_key)
         return fallback, "rule_based", None
     except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as error:
         print(f"Gemini insight response was unusable ({type(error).__name__}); using rule_based fallback.")
