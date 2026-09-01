@@ -266,11 +266,10 @@ class GeminiInsightProvider:
             "or imply causation. Return plain text in no more than two sentences.\n\n"
             f"JSON:\n{payload}"
         )
-        response = httpx.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
-            params={"key": self.api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=30,
+        response = _post_gemini_request(
+            self.api_key,
+            self.model,
+            {"contents": [{"parts": [{"text": prompt}]}]},
         )
         response.raise_for_status()
         data = response.json()
@@ -283,7 +282,7 @@ def log_available_gemini_models(api_key: str) -> None:
         response = httpx.get(
             "https://generativelanguage.googleapis.com/v1beta/models",
             params={"key": api_key},
-            timeout=30,
+            timeout=GEMINI_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         models = response.json().get("models", [])
