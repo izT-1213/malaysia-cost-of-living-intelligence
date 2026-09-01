@@ -173,8 +173,18 @@ def main() -> None:
         premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
         item_lookup_frame = pl.read_parquet(item_result.destination)
         insight_payload = build_daily_insight_payload(daily, as_of, item_lookup_frame)
-        insight_bundle, insight_provider, insight_model = generate_insight_bundle(insight_payload)
-        load_ai_insight(client, as_of, {**insight_payload, "state_insights": insight_bundle["states"]}, insight_bundle["general"], insight_provider, insight_model)
+        insight_bundle, insight_provider, insight_model, insight_failure_reason = generate_insight_bundle(insight_payload)
+        insight_payload_with_status = {
+            **insight_payload,
+            "state_insights": insight_bundle["states"],
+            "insight_generation": {
+                "provider": insight_provider,
+                "model": insight_model,
+                "status": "generated" if insight_provider == "gemini" else "fallback",
+                "failure_reason": insight_failure_reason,
+            },
+        }
+        load_ai_insight(client, as_of, insight_payload_with_status, insight_bundle["general"], insight_provider, insight_model)
         print(
             f"Daily summary load complete: {item_count:,} items, {premise_count:,} premises, "
             f"{daily_count:,} area summaries and {premise_summary_count:,} premise summaries across {args.days} days; "
