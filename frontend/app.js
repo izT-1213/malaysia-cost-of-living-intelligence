@@ -70,6 +70,16 @@ function replaceOptions(select, values) {
   });
 }
 
+function formatMetricDate(value) {
+  if (!value) return "Waiting for live data";
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function stateRowsForInsight() {
   const rows = datasets.daily.filter((row) => row.areaLevel === "state");
   const latest = rows.reduce((value, row) => row.metricDate > value ? row.metricDate : value, "");
@@ -571,6 +581,7 @@ async function loadSupabaseData() {
   const latestMonthly = await supabaseGet("monthly_item_area_summary?select=metric_month&area_level=eq.state&order=metric_month.desc&limit=1");
   const dailyDate = latestDaily[0]?.metric_date;
   const monthlyDate = latestMonthly[0]?.metric_month;
+  document.querySelector(".hero-note > span:last-child").textContent = formatMetricDate(dailyDate);
   const dailyStart = dailyDate ? new Date(`${dailyDate}T00:00:00Z`) : null;
   if (dailyStart) dailyStart.setUTCDate(dailyStart.getUTCDate() - 6);
   const dailyStartDate = dailyStart ? dailyStart.toISOString().slice(0, 10) : "";
