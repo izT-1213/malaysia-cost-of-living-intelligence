@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import json
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Protocol
 
 import httpx
@@ -43,7 +43,11 @@ def build_daily_insight_payload(
     """Create a small, deterministic payload for an optional explanation."""
     state_rows = summary.filter(pl.col("area_level") == "state")
     latest_date = state_rows.select(pl.col("metric_date").max()).item() if state_rows.height else None
-    latest = state_rows.filter(pl.col("metric_date") == latest_date) if latest_date else state_rows
+    window_start = latest_date - timedelta(days=6) if latest_date else None
+    latest = (
+        state_rows.filter(pl.col("metric_date").is_between(window_start, latest_date, closed="both"))
+        if latest_date else state_rows
+    )
     item_stats = (
         latest.group_by("item_code")
         .agg(pl.col("median_price").median().alias("median_price"))
@@ -57,33 +61,78 @@ def build_daily_insight_payload(
         )
         .sort("state")
     )
+    item_lookup_map = {}
+    if item_lookup is not None:
+        item_lookup_map = {
+            int(row["item_code"]): row
+            for row in item_lookup.select("item_code", "item", "unit", "item_category").to_dicts()
+        }
+    state_median_reference = (
+        float(state_stats.select(pl.col("median_price").median()).item()) if state_stats.height else None
+    )
+    state_rank = {
+        row["state"]: rank
+        for rank, row in enumerate(state_stats.sort(["median_price", "state"]).to_dicts(), start=1)
+    }
+    state_details = []
+    for row in state_stats.to_dicts():
+        state = row["state"]
+        item_rows = (
+            latest.filter(pl.col("state") == state)
+            .group_by("item_code")
+            .agg(pl.col("median_price").median().alias("median_price"))
+            .sort(["median_price", "item_code"])
+        )
+
+        def named_item(item_row: dict[str, Any]) -> dict[str, Any]:
+            code = int(item_row["item_code"])
+            lookup_row = item_lookup_map.get(code, {})
+            return {
+                "item_code": code,
+                "item": lookup_row.get("item", f"Item {code}"),
+                "median_price": round(float(item_row["median_price"]), 2),
+            }
+
+        lowest_item = named_item(item_rows.row(0, named=True)) if item_rows.height else None
+        highest_item = named_item(item_rows.row(-1, named=True)) if item_rows.height else None
+        state_details.append({
+            "state": state,
+            "median_price": round(float(row["median_price"]), 2),
+            "items_observed": int(row["items_observed"]),
+            "rank_low_to_high": state_rank[state],
+            "difference_from_state_median": (
+                round(float(row["median_price"]) - state_median_reference, 2)
+                if state_median_reference is not None else None
+            ),
+            "lowest_item": lowest_item,
+            "highest_item": highest_item,
+        })
     payload = {
         "as_of": as_of.isoformat(),
         "latest_metric_date": latest_date.isoformat() if latest_date else None,
         "states_observed": latest.select(pl.col("state").n_unique()).item() if latest.height else 0,
         "items_observed": item_stats.height,
-        "states": [
-            {
-                "state": row["state"],
-                "median_price": round(float(row["median_price"]), 2),
-                "items_observed": int(row["items_observed"]),
-            }
-            for row in state_stats.to_dicts()
-        ],
+        "state_median_reference": round(state_median_reference, 2) if state_median_reference is not None else None,
+        "states": state_details,
         "highest_median_items": [
-            {"item_code": int(row["item_code"]), "median_price": round(float(row["median_price"]), 2)}
+            {
+                "item_code": int(row["item_code"]),
+                "item": item_lookup_map.get(int(row["item_code"]), {}).get("item", f"Item {row['item_code']}"),
+                "median_price": round(float(row["median_price"]), 2),
+            }
             for row in item_stats.head(3).to_dicts()
         ],
         "lowest_median_items": [
-            {"item_code": int(row["item_code"]), "median_price": round(float(row["median_price"]), 2)}
+            {
+                "item_code": int(row["item_code"]),
+                "item": item_lookup_map.get(int(row["item_code"]), {}).get("item", f"Item {row['item_code']}"),
+                "median_price": round(float(row["median_price"]), 2),
+            }
             for row in item_stats.tail(3).sort("median_price").to_dicts()
         ],
     }
     if item_lookup is not None and latest.height:
-        lookup = {
-            int(row["item_code"]): row
-            for row in item_lookup.select("item_code", "item", "unit", "item_category").to_dicts()
-        }
+        lookup = item_lookup_map
         component_codes = {}
         for label, category, unit, name_rule in REFERENCE_BASKET_RULES:
             component_codes[label] = [
@@ -92,27 +141,71 @@ def build_daily_insight_payload(
                 and str(row["unit"]).strip().lower() == unit.lower()
                 and name_rule(str(row["item"]).upper())
             ]
-        basket_rows = []
-        for state in latest.get_column("state").unique().sort().to_list():
-            state_frame = latest.filter(pl.col("state") == state)
-            component_prices = {}
-            for label, codes in component_codes.items():
-                matches = state_frame.filter(pl.col("item_code").is_in(codes))
-                if matches.height:
-                    component_prices[label] = round(float(matches.get_column("median_price").median()), 2)
-            if len(component_prices) == len(REFERENCE_BASKET_RULES):
-                basket_rows.append({"state": state, "basket_median": round(sum(component_prices.values()), 2)})
+        def basket_rows_for(frame: pl.DataFrame) -> list[dict[str, Any]]:
+            rows = []
+            if not frame.height:
+                return rows
+            for state in frame.get_column("state").unique().sort().to_list():
+                state_frame = frame.filter(pl.col("state") == state)
+                component_prices = {}
+                for label, codes in component_codes.items():
+                    matches = state_frame.filter(pl.col("item_code").is_in(codes))
+                    if matches.height:
+                        component_prices[label] = round(float(matches.get_column("median_price").median()), 2)
+                if len(component_prices) == len(REFERENCE_BASKET_RULES):
+                    cheapest_component = min(component_prices.items(), key=lambda entry: (entry[1], entry[0]))
+                    priciest_component = max(component_prices.items(), key=lambda entry: (entry[1], entry[0]))
+                    rows.append({
+                        "state": state,
+                        "basket_median": round(sum(component_prices.values()), 2),
+                        "component_prices": component_prices,
+                        "lowest_component": {"item": cheapest_component[0], "median_price": cheapest_component[1]},
+                        "highest_component": {"item": priciest_component[0], "median_price": priciest_component[1]},
+                    })
+            return rows
+
+        basket_rows = basket_rows_for(latest)
         if basket_rows:
+            basket_reference = sum(row["basket_median"] for row in basket_rows) / len(basket_rows)
+            previous_rows = basket_rows_for(
+                state_rows.filter(
+                    pl.col("metric_date").is_between(
+                        window_start - timedelta(days=7), window_start - timedelta(days=1), closed="both"
+                    )
+                )
+            )
+            previous_by_state = {row["state"]: row["basket_median"] for row in previous_rows}
             payload["reference_basket"] = {
                 "components": [label for label, *_ in REFERENCE_BASKET_RULES],
                 "complete_states": len(basket_rows),
+                "period": f"latest {min(7, latest.select(pl.col('metric_date').n_unique()).item())} days",
+                "basket_median_reference": round(basket_reference, 2),
+                "previous_period": "prior 7 days",
                 "lowest": min(basket_rows, key=lambda row: (row["basket_median"], row["state"])),
                 "highest": max(basket_rows, key=lambda row: (row["basket_median"], row["state"])),
             }
             payload["states"] = [
-                {**row, **next((basket for basket in basket_rows if basket["state"] == row["state"]), {})}
+                {
+                    **row,
+                    **next((basket for basket in basket_rows if basket["state"] == row["state"]), {}),
+                    "basket_difference_from_reference": next(
+                        (
+                            round(basket["basket_median"] - basket_reference, 2)
+                            for basket in basket_rows
+                            if basket["state"] == row["state"]
+                        ),
+                        None,
+                    ),
+                    "basket_change_7d": next(
+                        (
+                            round(basket["basket_median"] - previous_by_state[basket["state"]], 2)
+                            for basket in basket_rows
+                            if basket["state"] == row["state"] and basket["state"] in previous_by_state
+                        ),
+                        None,
+                    ),
+                }
                 for row in payload["states"]
-                if any(basket["state"] == row["state"] for basket in basket_rows)
             ]
     return payload
 
@@ -228,10 +321,15 @@ def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], st
         "Return valid JSON only with keys general and states. Write a concise, factual "
         "insight for a Malaysian grocery-price dashboard, with a warm and practical tone "
         "that recognizes household grocery-shopping trade-offs without making stereotypes. "
-        "Use only the supplied JSON; "
-        "do not calculate new metrics, invent item names, or imply causation. The general "
-        "value must be at most two sentences. The states value must be an object mapping "
-        "each supplied state name to one short sentence.\n\n"
+        "Use only the supplied JSON; do not calculate new metrics, invent item names, "
+        "mention item codes, or imply causation. The general value should be at most two "
+        "sentences. Prefer complete reference-basket metrics when available: explain the "
+        "state's basket position, distance from the cross-state basket reference, and "
+        "the supplied highest or lowest basket component. If basket_change_7d is present, "
+        "say whether the basket rose or fell over the prior seven-day period. Each state value should be one "
+        "or two human, analytical sentences: say what stands out, not merely what the "
+        "numbers are. If a state lacks complete basket coverage, say so briefly and use "
+        "the tracked-item median only as a qualified fallback.\n\n"
         f"JSON:\n{json.dumps(payload, separators=(',', ':'))}"
     )
     try:
