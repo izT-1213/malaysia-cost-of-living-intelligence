@@ -94,6 +94,112 @@ function showStateInsight(state) {
   document.querySelector("#state-detail-value").textContent = median === null ? "—" : money(median);
   document.querySelector("#state-detail-copy").textContent = aiInsightBundle.state_insights?.[state] || aiInsightBundle.states?.[state] || "No stored state insight is available for this selection yet.";
   document.querySelectorAll(".map-state").forEach((button) => button.classList.toggle("selected", button.dataset.state === state));
+  renderStatePremiseAnalysis(state);
+}
+
+function statePremiseBasketRows(state) {
+  if (!state || !premiseObservations.length || !basketComponents.length) return [];
+  const stateRows = premiseObservations.filter((row) => row.state === state);
+  const grouped = new Map();
+  stateRows.forEach((row) => {
+    const area = grouped.get(String(row.premiseCode)) || {
+      premiseCode: row.premiseCode,
+      premise: row.premise,
+      district: row.district,
+      components: new Map(),
+    };
+    const rows = area.components.get(String(row.itemCode)) || [];
+    rows.push(row);
+    area.components.set(String(row.itemCode), rows);
+    grouped.set(String(row.premiseCode), area);
+  });
+  return [...grouped.values()].map((area) => {
+    const componentRows = basketComponents.map((component) => {
+      const matches = component.itemCodes.flatMap((code) => area.components.get(String(code)) || []);
+      const latest = latestComparableRows(matches);
+      return latest.length ? medianRow(latest) : null;
+    });
+    if (componentRows.some((row) => !row)) return null;
+    return {
+      ...area,
+      median: componentRows.reduce((sum, row) => sum + row.median, 0),
+      componentCount: componentRows.length,
+    };
+  }).filter(Boolean).sort((a, b) => a.median - b.median || String(a.premise).localeCompare(String(b.premise)));
+}
+
+function renderStatePremiseAnalysis(state) {
+  const copy = document.querySelector("#premise-analysis-copy");
+  const grid = document.querySelector("#premise-analysis-grid");
+  const chart = document.querySelector("#premise-analysis-chart");
+  const trend = document.querySelector("#premise-analysis-trend");
+  const tableBody = document.querySelector("#premise-analysis-table");
+  if (!copy || !grid || !chart || !trend || !tableBody) return;
+  if (!supabaseLoaded) {
+    copy.textContent = "Premise analysis will appear when live Supabase data is connected.";
+    grid.innerHTML = "";
+    chart.innerHTML = "";
+    trend.innerHTML = "";
+    tableBody.innerHTML = "";
+    return;
+  }
+  if (premiseDataLoading) {
+    copy.textContent = "Loading complete reference baskets across premises…";
+    grid.innerHTML = "";
+    chart.innerHTML = "";
+    trend.innerHTML = "";
+    tableBody.innerHTML = "";
+    return;
+  }
+  const rows = statePremiseBasketRows(state);
+  if (!premiseDataLoaded) {
+    copy.textContent = "Premise analysis is loading for this state…";
+    grid.innerHTML = "";
+    chart.innerHTML = "";
+    trend.innerHTML = "";
+    tableBody.innerHTML = "";
+    return;
+  }
+  if (!rows.length) {
+    copy.textContent = `No premises in ${state} have every reference-basket component in the latest seven-day window.`;
+    grid.innerHTML = "";
+    chart.innerHTML = "";
+    trend.innerHTML = "";
+    tableBody.innerHTML = "";
+    return;
+  }
+  const cheapest = rows[0];
+  const expensive = rows[rows.length - 1];
+  const median = medianOf(rows.map((row) => row.median));
+  copy.textContent = `${rows.length} premises in ${state} have complete coverage. Results use the median price of each basket component at the same premise; incomplete premises are excluded.`;
+  grid.innerHTML = [
+    ["Complete premises", rows.length, "Reference basket coverage"],
+    ["Typical basket", money(median), "Median across premises"],
+    ["Lowest complete basket", money(cheapest.median), cheapest.premise || `Premise ${cheapest.premiseCode}`],
+    ["Highest complete basket", money(expensive.median), expensive.premise || `Premise ${expensive.premiseCode}`],
+  ].map(([label, value, caption]) => `<article class="metric-card"><span class="metric-label">${label}</span><strong>${value}</strong><span class="metric-caption">${caption}</span></article>`).join("");
+  const max = Math.max(...rows.map((row) => row.median));
+  chart.innerHTML = `<div class="subchart-heading"><p class="eyebrow">Premise ranking</p><span>Top 10 complete baskets · RM</span></div>${rows.slice(0, 10).map((row) => `
+    <div class="bar-row"><span class="bar-label">${row.premise || `Premise ${row.premiseCode}`}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i></div><strong>${money(row.median)}</strong></div>`).join("")}`;
+  const trendRows = stateBasketTrendRows(state);
+  const trendMax = trendRows.length ? Math.max(...trendRows.map((row) => row.median)) : 0;
+  trend.innerHTML = `<div class="subchart-heading"><p class="eyebrow">Seven-day movement</p><span>Complete basket median · RM</span></div>${trendRows.length ? `<div class="mini-trend">${trendRows.map((row) => `<div class="mini-trend-column"><strong>${money(row.median)}</strong><i style="height:${(row.median / trendMax) * 100}%"></i><small>${row.date.slice(5)}</small></div>`).join("")}</div>` : '<p class="chart-empty">Not enough complete daily baskets for a trend.</p>'}`;
+  tableBody.innerHTML = rows.slice(0, 10).map((row) => `<tr><th scope="row">${row.premise || `Premise ${row.premiseCode}`}</th><td>${row.district || "—"}</td><td>${money(row.median)}</td></tr>`).join("");
+}
+
+function stateBasketTrendRows(state) {
+  const rows = datasets.daily.filter((row) => row.areaLevel === "state" && row.state === state);
+  return [...new Set(rows.map((row) => row.metricDate))].sort().map((metricDate) => {
+    const dayRows = rows.filter((row) => row.metricDate === metricDate);
+    const componentRows = basketComponents.map((component) => {
+      const matches = dayRows.filter((row) => component.itemCodes.includes(row.itemCode));
+      return matches.length ? medianOf(matches.map((row) => row.median)) : null;
+    });
+    return componentRows.some((value) => value === null) ? null : {
+      date: metricDate,
+      median: componentRows.reduce((sum, value) => sum + value, 0),
+    };
+  }).filter(Boolean);
 }
 
 function renderInsightMap() {
@@ -275,6 +381,22 @@ function renderMetrics(rows) {
   document.querySelector("#max-caption").textContent = rows.find((row) => (basketMode ? row.median : row.max) === max)?.[areaField] || "Selected area";
 }
 
+function renderStateBasketChart(rows) {
+  const panel = document.querySelector("#state-basket-chart-panel");
+  const chart = document.querySelector("#state-basket-chart");
+  if (!panel || !chart) return;
+  const visible = viewFilter.value !== "item" && districtFilter.value === "all" ? rows : [];
+  panel.hidden = !visible.length;
+  if (!visible.length) {
+    chart.innerHTML = "";
+    return;
+  }
+  const sorted = [...visible].sort((a, b) => b.median - a.median || a.state.localeCompare(b.state));
+  const max = Math.max(...sorted.map((row) => row.median));
+  chart.innerHTML = sorted.map((row) => `
+    <div class="bar-row"><span class="bar-label">${row.state}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i></div><strong>${money(row.median)}</strong></div>`).join("");
+}
+
 function medianOf(values) {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -378,9 +500,11 @@ function render() {
       : "There are no observations for the selected item and area. Try another filter or period.";
     document.querySelector("#table-title").textContent = basketMode ? "Basket availability" : "No matching observations";
     table.innerHTML = `<tr><td colspan="5">${basketMode ? "Daily data is available, but no area has a complete reference basket in the latest seven-day window." : "No rows match the current filters."}</td></tr>`;
+    renderStateBasketChart([]);
     return;
   }
   renderMetrics(rows);
+  renderStateBasketChart(rows);
   renderTable(rows);
   const basketMode = viewFilter.value !== "item";
   const low = basketMode ? Math.min(...rows.map((row) => row.median)) : Math.min(...rows.map((row) => row.min));
@@ -499,7 +623,7 @@ document.querySelector("#download-button").addEventListener("click", () => {
 });
 
 document.querySelectorAll(".nav-button").forEach((button) => {
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     document.querySelectorAll(".nav-button").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     document.querySelectorAll("#dashboard-view, #ai-view, #custom-view, #about-view").forEach((view) => { view.hidden = view.id !== button.dataset.view; });
@@ -512,6 +636,10 @@ document.querySelectorAll(".nav-button").forEach((button) => {
       customBasketPanel.hidden = false;
     } else if (button.dataset.view === "ai-view") {
       renderInsightMap();
+      if (supabaseLoaded && !premiseDataLoaded) {
+        await loadPremiseData(basketComponents.flatMap((component) => component.itemCodes));
+        renderStatePremiseAnalysis(document.querySelector(".map-state.selected")?.dataset.state || "");
+      }
     }
   });
 });
