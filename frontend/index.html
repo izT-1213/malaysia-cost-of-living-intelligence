@@ -129,6 +129,14 @@
           </article>
         </section>
 
+        <section class="panel chart-panel" id="state-basket-chart-panel" aria-label="Reference basket cost by state">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Comparison chart</p><h2>Reference basket cost by state</h2></div>
+            <span class="trend-badge">RM · Complete baskets · Latest 7 days</span>
+          </div>
+          <div class="bar-chart" id="state-basket-chart"></div>
+        </section>
+
         <section class="panel table-panel">
           <div class="panel-heading table-heading">
             <div>
@@ -157,13 +165,21 @@
           <section class="ai-general-card" aria-live="polite">
             <div><p class="eyebrow">General insight</p><h2 id="ai-general-heading">The latest grocery picture</h2></div>
             <p id="ai-general-copy">Loading the latest structured insight…</p>
-            <small id="ai-general-meta">Insights are generated from stored summaries, not when this page opens.</small>
+            <small id="ai-general-meta">Insights are generated from stored summaries, not when this page opens. Prices are in RM (MYR); changes are percentages; counts are observations or items.</small>
           </section>
           <section class="ai-map-section">
             <div class="panel-heading"><div><p class="eyebrow">State lens</p><h2>Malaysia at a glance</h2></div><span class="trend-badge">Hover or tap a state</span></div>
             <p class="ai-map-copy">Choose a state to see its stored note and latest median tracked-item price.</p>
             <div class="state-map" id="state-map" role="group" aria-label="Malaysia state insight map"></div>
             <div class="state-detail" id="state-detail" aria-live="polite"><p class="eyebrow">Selected state</p><h3 id="state-detail-name">Select a state</h3><strong id="state-detail-value">—</strong><p id="state-detail-copy">State-level insight will appear here.</p></div>
+            <section class="state-premise-analysis" aria-live="polite">
+              <div class="panel-heading"><div><p class="eyebrow">Premise analysis</p><h3 id="premise-analysis-heading">Where can this basket be completed?</h3></div><span class="trend-badge" id="premise-analysis-window">Latest 7 days</span></div>
+              <p class="ai-map-copy" id="premise-analysis-copy">Select a state to compare complete reference baskets across its premises.</p>
+              <div class="premise-analysis-grid" id="premise-analysis-grid"></div>
+              <div class="premise-chart" id="premise-analysis-chart"></div>
+              <div class="premise-trend" id="premise-analysis-trend"></div>
+              <div class="table-wrap"><table><thead><tr><th>Premise</th><th>District</th><th>Complete basket</th></tr></thead><tbody id="premise-analysis-table"></tbody></table></div>
+            </section>
           </section>
         </section>
 

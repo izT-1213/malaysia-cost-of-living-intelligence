@@ -329,7 +329,10 @@ def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], st
         "say whether the basket rose or fell over the prior seven-day period. Each state value should be one "
         "or two human, analytical sentences: say what stands out, not merely what the "
         "numbers are. If a state lacks complete basket coverage, say so briefly and use "
-        "the tracked-item median only as a qualified fallback.\n\n"
+        "the tracked-item median only as a qualified fallback. Always write monetary values "
+        "with the RM prefix and two decimal places; RM is Malaysian ringgit (MYR). Write "
+        "percentage changes with the % sign, and label counts as observations, items, or "
+        "states. Never leave a bare number whose unit could be unclear.\n\n"
         f"JSON:\n{json.dumps(payload, separators=(',', ':'))}"
     )
     try:
