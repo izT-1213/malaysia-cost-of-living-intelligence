@@ -54,7 +54,8 @@ upserts deterministic.
 
 1. [x] Apply `supabase/migrations/003_summary_tables.sql`.
 2. [x] Implement and test the summarization functions locally.
-3. Backfill historical monthly summaries.
+3. Run the manual `PriceCatcher historical monthly backfill` workflow for the
+   available month range.
 4. [x] Replace the current full-raw daily command with the rolling-summary job.
 5. Run the revised job manually and verify Supabase size and summary rows.
 6. Re-enable the daily schedule.

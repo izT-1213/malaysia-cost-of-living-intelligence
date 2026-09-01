@@ -1,0 +1,64 @@
+name: PriceCatcher historical monthly backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_month:
+        description: "First source month to backfill (YYYY-MM)"
+        required: true
+        type: string
+      end_month:
+        description: "Last source month to backfill (YYYY-MM)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      STORE_RAW_OBSERVATIONS: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install pipeline
+        run: python -m pip install --upgrade pip && python -m pip install .
+
+      - name: Backfill monthly summaries
+        env:
+          START_MONTH: ${{ inputs.start_month }}
+          END_MONTH: ${{ inputs.end_month }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          from datetime import date
+
+          start = date.fromisoformat(os.environ["START_MONTH"] + "-01")
+          end = date.fromisoformat(os.environ["END_MONTH"] + "-01")
+          if start > end:
+              raise SystemExit("start_month must not be later than end_month")
+
+          current = start
+          while current <= end:
+              month = current.strftime("%Y-%m")
+              print(f"Backfilling {month}", flush=True)
+              subprocess.run(
+                  [sys.executable, "-m", "pipeline.cli", "backfill-month", "--month", month, "--batch-size", "2000"],
+                  check=True,
+              )
+              current = date(current.year + (current.month == 12), current.month % 12 + 1, 1)
+          PY

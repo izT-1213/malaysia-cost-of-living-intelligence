@@ -63,7 +63,7 @@
           <label>
             <span>Period</span>
             <select id="period-filter">
-              <option value="daily">Latest 14 days</option>
+              <option value="daily">Latest 7 days</option>
               <option value="monthly">Monthly view</option>
             </select>
           </label>
@@ -132,7 +132,7 @@
         <section class="panel chart-panel" id="state-basket-chart-panel" aria-label="Reference basket cost by state">
           <div class="panel-heading">
             <div><p class="eyebrow">Comparison chart</p><h2>Reference basket cost by state</h2></div>
-            <span class="trend-badge">RM · Complete baskets · Latest 14 days</span>
+            <span class="trend-badge">RM · Complete baskets · Latest 7 days</span>
           </div>
           <div class="bar-chart" id="state-basket-chart"></div>
         </section>
@@ -140,7 +140,7 @@
         <section class="panel chart-panel basket-trend-panel" id="basket-trend-panel" aria-label="Reference basket cost over time">
           <div class="panel-heading">
             <div><p class="eyebrow">Basket movement</p><h2 id="basket-trend-title">Reference basket cost over time</h2></div>
-            <span class="trend-badge" id="basket-trend-badge">RM · Daily · Latest 14 days</span>
+            <span class="trend-badge" id="basket-trend-badge">RM · Daily · Latest 7 days</span>
           </div>
           <p class="chart-subtitle" id="basket-trend-subtitle">Median complete basket across states. Only areas with every reference-basket component are included.</p>
           <div class="basket-trend-chart" id="basket-trend-chart"></div>
@@ -186,7 +186,7 @@
             <div class="state-map" id="state-map" role="group" aria-label="Malaysia state insight map"></div>
             <div class="state-detail" id="state-detail" aria-live="polite"><p class="eyebrow">Selected state</p><h3 id="state-detail-name">Select a state</h3><strong id="state-detail-value">—</strong><p id="state-detail-copy">State-level insight will appear here.</p><div class="state-detail-facts" id="state-detail-facts"></div><div class="state-component-breakdown" id="state-component-breakdown"></div></div>
             <section class="state-premise-analysis" aria-live="polite">
-              <div class="panel-heading"><div><p class="eyebrow">Premise analysis</p><h3 id="premise-analysis-heading">Where can this basket be completed?</h3></div><span class="trend-badge" id="premise-analysis-window">Latest 14 days</span></div>
+              <div class="panel-heading"><div><p class="eyebrow">Premise analysis</p><h3 id="premise-analysis-heading">Where can this basket be completed?</h3></div><span class="trend-badge" id="premise-analysis-window">Latest 7 days</span></div>
               <p class="ai-map-copy" id="premise-analysis-copy">Select a state to compare complete reference baskets across its premises.</p>
               <div class="premise-analysis-grid" id="premise-analysis-grid"></div>
               <div class="premise-chart" id="premise-analysis-chart"></div>

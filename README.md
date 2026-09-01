@@ -24,6 +24,11 @@ python -m pipeline.cli daily-summary --limit 1000
 python -m pipeline.cli backfill-month --month 2026-07
 ```
 
+For multiple months, use the manual `PriceCatcher historical monthly backfill`
+GitHub Actions workflow and provide the first and last month in `YYYY-MM` form.
+It loads compact monthly summaries only; it does not store raw observations or
+premise-level detail.
+
 ## Daily update automation
 
 The GitHub Actions workflow in `.github/workflows/pricecatcher-daily.yml` can be

@@ -16,7 +16,7 @@ GEMINI_REQUEST_TIMEOUT_SECONDS = 90.0
 GEMINI_MAX_ATTEMPTS = 3
 GEMINI_RETRY_DELAY_SECONDS = 2.0
 GEMINI_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
-INSIGHT_WINDOW_DAYS = 14
+INSIGHT_WINDOW_DAYS = 7
 
 
 class InsightProvider(Protocol):
@@ -212,7 +212,7 @@ def build_daily_insight_payload(
                 "previous_period": f"prior {INSIGHT_WINDOW_DAYS} days",
                 "lowest": min(basket_rows, key=lambda row: (row["basket_median"], row["state"])),
                 "highest": max(basket_rows, key=lambda row: (row["basket_median"], row["state"])),
-                "complete_baskets_with_fewer_than_14_days": [
+                "complete_baskets_with_fewer_than_7_days": [
                     {
                         "state": row["state"],
                         "days_observed": row["reference_basket_days_observed"],
@@ -234,7 +234,7 @@ def build_daily_insight_payload(
                         ),
                         None,
                     ),
-                    "basket_change_14d": next(
+                    "basket_change_7d": next(
                         (
                             round(basket["basket_median"] - previous_by_state[basket["state"]], 2)
                             for basket in basket_rows
@@ -253,7 +253,7 @@ def fallback_explanation(payload: dict[str, Any]) -> str:
     basket = payload.get("reference_basket")
     if basket:
         lowest, highest = basket["lowest"], basket["highest"]
-        low_day_states = basket.get("complete_baskets_with_fewer_than_14_days", [])
+        low_day_states = basket.get("complete_baskets_with_fewer_than_7_days", [])
         coverage_note = ""
         if low_day_states:
             examples = ", ".join(
@@ -262,7 +262,7 @@ def fallback_explanation(payload: dict[str, Any]) -> str:
             )
             suffix = " and other states" if len(low_day_states) > 3 else ""
             coverage_note = (
-                f" Coverage is uneven: {examples}{suffix} had fewer than fourteen observed days, "
+                f" Coverage is uneven: {examples}{suffix} had fewer than seven observed days, "
                 "so those basket estimates should be interpreted cautiously."
             )
         return (
@@ -455,18 +455,18 @@ def generate_insight_bundle(
         "mention item codes, or imply causation. The general value should be at most two "
         "sentences. Prefer complete reference-basket metrics when available: explain the "
         "state's basket position, distance from the cross-state basket reference, and "
-        "the supplied highest or lowest basket component. If basket_change_14d is present, "
-        "say whether the basket rose or fell over the prior fourteen-day period. Each state value should be one "
+        "the supplied highest or lowest basket component. If basket_change_7d is present, "
+        "say whether the basket rose or fell over the prior seven-day period. Each state value should be one "
         "or two human, analytical sentences: say what stands out, not merely what the "
         "numbers are. Treat reference_basket_items_observed and reference_basket_days_observed "
         "as coverage indicators, not prices. If a state has fewer than all "
         "reference_basket_items_total items, explicitly say that its basket is incomplete. "
-        "If reference_basket_days_observed is below fourteen, explicitly say that the basket uses "
-        "fewer than fourteen observed days. Always mention the observed item/day coverage when it "
+        "If reference_basket_days_observed is below seven, explicitly say that the basket uses "
+        "fewer than seven observed days. Always mention the observed item/day coverage when it "
         "qualifies the comparison, and do not describe a tracked-item median as a complete "
         "basket. For the general value, inspect "
-        "reference_basket.complete_baskets_with_fewer_than_14_days and disclose that coverage "
-        "is uneven when it is non-empty; do not imply every state has fourteen days of observations "
+        "reference_basket.complete_baskets_with_fewer_than_7_days and disclose that coverage "
+        "is uneven when it is non-empty; do not imply every state has seven days of observations "
         "just because it has all basket items. Always write monetary values "
         "with the RM prefix and two decimal places; RM is Malaysian ringgit (MYR). Write "
         "percentage changes with the % sign, and label counts as observations, items, or "

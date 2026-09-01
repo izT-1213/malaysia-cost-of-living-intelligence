@@ -37,7 +37,7 @@ from pipeline.transforms.enrich import enrich_observations
 from pipeline.transforms.pricecatcher import normalize_columns
 
 
-PREMISE_DETAIL_WINDOW_DAYS = 14
+PREMISE_DETAIL_WINDOW_DAYS = 7
 
 
 def main() -> None:
