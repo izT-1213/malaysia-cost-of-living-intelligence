@@ -167,11 +167,15 @@
             <p id="ai-general-copy">Loading the latest structured insight…</p>
             <small id="ai-general-meta">Insights are generated from stored summaries, not when this page opens. Prices are in RM (MYR); changes are percentages; counts are observations or items.</small>
           </section>
+          <section class="ai-facts-panel" aria-label="Insight evidence">
+            <div class="panel-heading"><div><p class="eyebrow">Evidence behind the insight</p><h2>How much data is behind this?</h2></div></div>
+            <div class="ai-facts-grid" id="ai-general-facts"><p class="chart-empty">Loading coverage details…</p></div>
+          </section>
           <section class="ai-map-section">
             <div class="panel-heading"><div><p class="eyebrow">State lens</p><h2>Malaysia at a glance</h2></div><span class="trend-badge">Hover or tap a state</span></div>
             <p class="ai-map-copy">Choose a state to see its stored note and latest median tracked-item price.</p>
             <div class="state-map" id="state-map" role="group" aria-label="Malaysia state insight map"></div>
-            <div class="state-detail" id="state-detail" aria-live="polite"><p class="eyebrow">Selected state</p><h3 id="state-detail-name">Select a state</h3><strong id="state-detail-value">—</strong><p id="state-detail-copy">State-level insight will appear here.</p></div>
+            <div class="state-detail" id="state-detail" aria-live="polite"><p class="eyebrow">Selected state</p><h3 id="state-detail-name">Select a state</h3><strong id="state-detail-value">—</strong><p id="state-detail-copy">State-level insight will appear here.</p><div class="state-detail-facts" id="state-detail-facts"></div><div class="state-component-breakdown" id="state-component-breakdown"></div></div>
             <section class="state-premise-analysis" aria-live="polite">
               <div class="panel-heading"><div><p class="eyebrow">Premise analysis</p><h3 id="premise-analysis-heading">Where can this basket be completed?</h3></div><span class="trend-badge" id="premise-analysis-window">Latest 7 days</span></div>
               <p class="ai-map-copy" id="premise-analysis-copy">Select a state to compare complete reference baskets across its premises.</p>

@@ -64,6 +64,14 @@ button, select { font: inherit; }
 .ai-general-card > p { margin: 0; color: var(--ink); font-size: 18px; line-height: 1.55; }
 .ai-general-card small, .ai-map-copy { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .ai-general-card small { grid-column: 2; margin-top: -16px; }
+.ai-facts-panel { margin-top: 14px; padding: 26px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.ai-facts-panel h2 { margin: 0; font-size: 23px; letter-spacing: -.045em; }
+.ai-facts-grid, .state-detail-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; }
+.ai-fact { min-height: 92px; display: flex; flex-direction: column; justify-content: space-between; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--green) 5%, var(--card)); }
+.ai-fact strong { font-size: 19px; letter-spacing: -.04em; }
+.ai-fact small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.state-detail-facts { grid-column: 1 / -1; margin-top: 8px; }
+.state-component-breakdown { grid-column: 1 / -1; margin-top: 4px; }
 .ai-map-section { margin-top: 14px; }
 .ai-map-copy { margin: 12px 0 20px; }
 .state-map { display: grid; grid-template-columns: repeat(5, minmax(90px, 1fr)); gap: 9px; padding: 22px; border: 1px solid #477461; border-radius: 12px; background: #15382d; }
@@ -96,4 +104,4 @@ button, select { font: inherit; }
 .mini-trend-column i { display: block; min-height: 8px; border-radius: 4px 4px 0 0; background: var(--green); }
 .mini-trend-column small { color: var(--muted); font: 10px 'DM Mono'; }
 .chart-empty { margin: 10px 0; color: var(--muted); font-size: 13px; }
-@media (max-width: 800px) { .site-nav { gap: 11px; }.ai-general-card { grid-template-columns: 1fr; gap: 14px; }.ai-general-card small { grid-column: auto; margin-top: 0; }.state-map { grid-template-columns: repeat(2, 1fr); padding: 14px; }.state-detail { grid-template-columns: 1fr 1fr; }.premise-analysis-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 800px) { .site-nav { gap: 11px; }.ai-general-card { grid-template-columns: 1fr; gap: 14px; }.ai-general-card small { grid-column: auto; margin-top: 0; }.state-map { grid-template-columns: repeat(2, 1fr); padding: 14px; }.state-detail { grid-template-columns: 1fr 1fr; }.premise-analysis-grid, .ai-facts-grid, .state-detail-facts { grid-template-columns: 1fr 1fr; } }

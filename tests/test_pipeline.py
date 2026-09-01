@@ -5,6 +5,7 @@ import pytest
 import httpx
 
 from pipeline.ingestion.pricecatcher import download_latest_available_snapshot, monthly_url
+from pipeline.insights import _is_daily_quota_error, _parse_gemini_bundle
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
 from pipeline.quality.pricecatcher import validate_observations
 from pipeline.storage.supabase import load_item_area_summary
@@ -48,6 +49,23 @@ def test_percentage_change_handles_zero_baseline():
 def test_quality_rejects_non_positive_prices():
     frame = pl.DataFrame({"date": [date(2026, 8, 19)], "item_name": ["Rice"], "price": [0.0]})
     assert "price contains non-positive values" in validate_observations(frame)
+
+
+def test_gemini_bundle_parser_accepts_fenced_state_list():
+    result = _parse_gemini_bundle(
+        '```json\n{"general":"hello","states":[{"state":"Johor","insight":"steady"}]}\n```'
+    )
+    assert result == {"general": "hello", "states": {"Johor": "steady"}}
+
+
+def test_gemini_quota_errors_are_not_classified_as_transient():
+    request = httpx.Request("POST", "https://example.test")
+    response = httpx.Response(
+        429,
+        request=request,
+        json={"error": {"status": "RESOURCE_EXHAUSTED", "message": "daily quota exceeded"}},
+    )
+    assert _is_daily_quota_error(response)
 
 
 def test_robust_z_score_adds_anomaly_signal():
