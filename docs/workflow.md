@@ -20,9 +20,16 @@ For each available month:
 7. Record the source URL, month, retrieval time, row count, and SHA-256 hash.
 8. Discard the temporary Parquet file when the runner ends.
 
-Historical monthly summaries remain in Supabase. Historical raw observations do
-not need to be copied into Supabase because the official source files can be
-downloaded again using the recorded provenance.
+Monthly summaries are retained in Supabase for the current calendar month and
+the five preceding calendar months. Older monthly summaries are removed by the
+pipeline. Historical raw observations do not need to be copied into Supabase
+because the official source files can be downloaded again using the recorded
+provenance.
+
+Yearly comparisons should be produced as a separate, much smaller annual
+aggregate from the source snapshots before older monthly rows are discarded.
+That preserves year-over-year context without retaining every historical month
+in the serving database.
 
 ## Rolling recent window
 
@@ -40,8 +47,8 @@ recent summaries, not the full rolling raw dataset.
 ## Month transition
 
 When a new month becomes available, the job continues to calculate the recent
-30-day window from two source files. The previous month’s compact summaries are
-retained, and the new month’s summaries are added or updated.
+30-day window from two source files. The previous five months’ compact
+summaries are retained, and the new month’s summaries are added or updated.
 
 The source is surveillance data: missing item/premise/date combinations are
 not interpreted as zero prices. Metric calculations use only observed prices.

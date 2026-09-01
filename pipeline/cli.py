@@ -18,6 +18,7 @@ from pipeline.ingestion.pricecatcher import (
 from pipeline.insights import build_daily_insight_payload, generate_insight_bundle
 from pipeline.storage.supabase import (
     delete_observations_before,
+    delete_monthly_summaries_before,
     delete_premise_summaries_before,
     get_client,
     load_item_area_summary,
@@ -38,6 +39,13 @@ from pipeline.transforms.pricecatcher import normalize_columns
 
 
 PREMISE_DETAIL_WINDOW_DAYS = 7
+MONTHLY_SUMMARY_RETENTION_MONTHS = 6
+
+
+def months_before(value: date, months: int) -> date:
+    """Return the first day of the calendar month ``months`` before ``value``."""
+    month_index = value.year * 12 + value.month - 1 - months
+    return date(month_index // 12, month_index % 12 + 1, 1)
 
 
 def main() -> None:
@@ -130,6 +138,9 @@ def main() -> None:
         item_result = download_lookup_snapshot("item", raw_dir)
         premise_result = download_lookup_snapshot("premise", raw_dir)
         client = get_client()
+        delete_monthly_summaries_before(
+            client, months_before(as_of, MONTHLY_SUMMARY_RETENTION_MONTHS - 1)
+        )
         item_count = load_lookup(client, pl.read_parquet(item_result.destination), "item_lookup", args.batch_size)
         premise_count = load_lookup(
             client, pl.read_parquet(premise_result.destination), "premise_lookup", args.batch_size
@@ -222,6 +233,9 @@ def main() -> None:
             pl.read_parquet(premise_result.destination),
         )
         client = get_client()
+        delete_monthly_summaries_before(
+            client, months_before(date.today(), MONTHLY_SUMMARY_RETENTION_MONTHS - 1)
+        )
         load_lookup(client, pl.read_parquet(item_result.destination), "item_lookup", args.batch_size)
         load_lookup(client, pl.read_parquet(premise_result.destination), "premise_lookup", args.batch_size)
         load_source_snapshot(client, {
