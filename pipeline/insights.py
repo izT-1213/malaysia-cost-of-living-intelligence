@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import os
 import json
+import time
 from datetime import date, timedelta
 from typing import Any, Protocol
 
 import httpx
 import polars as pl
+
+
+GEMINI_REQUEST_TIMEOUT_SECONDS = 90.0
+GEMINI_MAX_ATTEMPTS = 3
+GEMINI_RETRY_DELAY_SECONDS = 2.0
+GEMINI_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 class InsightProvider(Protocol):
@@ -259,11 +266,10 @@ class GeminiInsightProvider:
             "or imply causation. Return plain text in no more than two sentences.\n\n"
             f"JSON:\n{payload}"
         )
-        response = httpx.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
-            params={"key": self.api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=30,
+        response = _post_gemini_request(
+            self.api_key,
+            self.model,
+            {"contents": [{"parts": [{"text": prompt}]}]},
         )
         response.raise_for_status()
         data = response.json()
@@ -276,7 +282,7 @@ def log_available_gemini_models(api_key: str) -> None:
         response = httpx.get(
             "https://generativelanguage.googleapis.com/v1beta/models",
             params={"key": api_key},
-            timeout=30,
+            timeout=GEMINI_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         models = response.json().get("models", [])
@@ -306,8 +312,44 @@ def generate_insight(payload: dict[str, Any]) -> tuple[str, str, str | None]:
     return fallback_explanation(payload), "rule_based", None
 
 
-def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], str, str | None]:
-    """Return a general note and state notes, with a deterministic fallback."""
+def _post_gemini_request(api_key: str, model: str, request_body: dict[str, Any]) -> httpx.Response:
+    """Call Gemini with bounded retries for timeouts and transient API errors."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    last_error: Exception | None = None
+    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+        try:
+            response = httpx.post(
+                url,
+                params={"key": api_key},
+                json=request_body,
+                timeout=GEMINI_REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            if attempt > 1:
+                print(f"Gemini request succeeded on retry {attempt}/{GEMINI_MAX_ATTEMPTS}.")
+            return response
+        except httpx.HTTPStatusError as error:
+            status_code = error.response.status_code
+            if status_code not in GEMINI_RETRYABLE_STATUS_CODES:
+                raise
+            last_error = error
+            print(f"Gemini request attempt {attempt}/{GEMINI_MAX_ATTEMPTS} returned HTTP {status_code}.")
+        except (httpx.TimeoutException, httpx.NetworkError) as error:
+            last_error = error
+            print(
+                f"Gemini request attempt {attempt}/{GEMINI_MAX_ATTEMPTS} failed with "
+                f"{type(error).__name__}."
+            )
+        if attempt < GEMINI_MAX_ATTEMPTS:
+            time.sleep(GEMINI_RETRY_DELAY_SECONDS * attempt)
+    assert last_error is not None
+    raise last_error
+
+
+def generate_insight_bundle(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], str, str | None, str | None]:
+    """Return notes, provider metadata, and an optional fallback reason."""
     provider_name = os.getenv("AI_PROVIDER", "disabled").strip().lower()
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
@@ -316,7 +358,7 @@ def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], st
         "states": fallback_state_explanations(payload),
     }
     if provider_name != "gemini" or not api_key:
-        return fallback, "rule_based", None
+        return fallback, "rule_based", None, "gemini_not_configured"
     prompt = (
         "Return valid JSON only with keys general and states. Write a concise, factual "
         "insight for a Malaysian grocery-price dashboard, with a warm and practical tone "
@@ -336,14 +378,13 @@ def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], st
         f"JSON:\n{json.dumps(payload, separators=(',', ':'))}"
     )
     try:
-        response = httpx.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            params={"key": api_key},
-            json={
+        response = _post_gemini_request(
+            api_key,
+            model,
+            {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"responseMimeType": "application/json", "temperature": 0.3},
             },
-            timeout=30,
         )
         response.raise_for_status()
         text = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -353,12 +394,15 @@ def generate_insight_bundle(payload: dict[str, Any]) -> tuple[dict[str, Any], st
         bundle = json.loads(cleaned)
         if not isinstance(bundle.get("general"), str) or not isinstance(bundle.get("states"), dict):
             raise ValueError("Invalid insight bundle")
-        return {"general": bundle["general"], "states": bundle["states"]}, "gemini", model
+        return {"general": bundle["general"], "states": bundle["states"]}, "gemini", model, None
     except httpx.HTTPStatusError as error:
         print(f"Gemini insight request failed with HTTP {error.response.status_code}; using rule_based fallback.")
         if error.response.status_code == 404:
             log_available_gemini_models(api_key)
-        return fallback, "rule_based", None
+        return fallback, "rule_based", None, f"http_{error.response.status_code}"
     except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as error:
-        print(f"Gemini insight response was unusable ({type(error).__name__}); using rule_based fallback.")
-        return fallback, "rule_based", None
+        print(
+            f"Gemini insight failed after {GEMINI_MAX_ATTEMPTS} attempt(s) "
+            f"({type(error).__name__}); using rule_based fallback."
+        )
+        return fallback, "rule_based", None, type(error).__name__
