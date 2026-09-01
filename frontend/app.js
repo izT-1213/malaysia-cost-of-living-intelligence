@@ -221,7 +221,7 @@ function renderStatePremiseAnalysis(state) {
     return;
   }
   if (!rows.length) {
-    copy.textContent = `No premises in ${state} have every reference-basket component in the latest seven-day window.`;
+    copy.textContent = `No premises in ${state} have every reference-basket component in the latest 14-day window.`;
     grid.innerHTML = "";
     chart.innerHTML = "";
     trend.innerHTML = "";
@@ -773,8 +773,11 @@ async function loadSupabaseData() {
   const dailyStart = dailyDate ? new Date(`${dailyDate}T00:00:00Z`) : null;
   if (dailyStart) dailyStart.setUTCDate(dailyStart.getUTCDate() - 6);
   const dailyStartDate = dailyStart ? dailyStart.toISOString().slice(0, 10) : "";
+  const premiseStart = dailyDate ? new Date(`${dailyDate}T00:00:00Z`) : null;
+  if (premiseStart) premiseStart.setUTCDate(premiseStart.getUTCDate() - 13);
+  const premiseStartDate = premiseStart ? premiseStart.toISOString().slice(0, 10) : "";
   dailyDateForPremise = dailyDate || "";
-  dailyStartDateForPremise = dailyStartDate;
+  dailyStartDateForPremise = premiseStartDate;
   const daily = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDate}&metric_date=lte.${dailyDate}&order=metric_date.asc,state.asc,item_code.asc`) : [];
   const monthly = monthlyDate ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc`) : [];
   try {

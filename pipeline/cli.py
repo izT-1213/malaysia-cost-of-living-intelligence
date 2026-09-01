@@ -37,6 +37,9 @@ from pipeline.transforms.enrich import enrich_observations
 from pipeline.transforms.pricecatcher import normalize_columns
 
 
+PREMISE_DETAIL_WINDOW_DAYS = 14
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Malaysia Cost of Living Intelligence pipeline")
     parser.add_argument("--version", action="version", version="0.1.0")
@@ -101,7 +104,7 @@ def main() -> None:
         item_result = download_lookup_snapshot("item", raw_dir)
         premise_result = download_lookup_snapshot("premise", raw_dir)
         client = get_client()
-        premise_cutoff = as_of - timedelta(days=6)
+        premise_cutoff = as_of - timedelta(days=PREMISE_DETAIL_WINDOW_DAYS - 1)
         delete_premise_summaries_before(client, premise_cutoff)
         item_count = load_lookup(client, pl.read_parquet(item_result.destination), "item_lookup", args.batch_size)
         premise_count = load_lookup(
@@ -169,7 +172,9 @@ def main() -> None:
         daily_count = load_item_area_summary(
             client, daily, "daily_item_area_summary", source_hash, args.batch_size
         )
-        premise_daily = summarize_item_premise(recent_window(enriched, as_of, days=7))
+        premise_daily = summarize_item_premise(
+            recent_window(enriched, as_of, days=PREMISE_DETAIL_WINDOW_DAYS)
+        )
         premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
         item_lookup_frame = pl.read_parquet(item_result.destination)
         insight_payload = build_daily_insight_payload(daily, as_of, item_lookup_frame)
