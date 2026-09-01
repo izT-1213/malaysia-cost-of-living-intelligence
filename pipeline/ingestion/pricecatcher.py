@@ -51,6 +51,30 @@ def download_monthly_snapshot(
     return _download_url_snapshot(raw_dir, url, f"pricecatcher_{month}.parquet", month, timeout_seconds)
 
 
+def download_latest_available_snapshot(
+    raw_dir: Path,
+    value: date | None = None,
+    timeout_seconds: float = 120.0,
+    max_lookback_months: int = 2,
+) -> DownloadResult:
+    """Download the requested month, falling back when a new month is unpublished.
+
+    PriceCatcher files are published monthly, so the calendar's current month can
+    briefly have no Parquet file. Only a 404 triggers the fallback; network and
+    server errors still fail loudly so an ingestion problem is not hidden.
+    """
+    requested = value or date.today()
+    candidate = requested
+    for attempt in range(max_lookback_months + 1):
+        try:
+            return download_monthly_snapshot(raw_dir, candidate, timeout_seconds)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404 or attempt == max_lookback_months:
+                raise
+            candidate = date(candidate.year - (candidate.month == 1), candidate.month - 1 or 12, 1)
+    raise RuntimeError("No available PriceCatcher snapshot found")
+
+
 def download_lookup_snapshot(
     lookup_name: str,
     raw_dir: Path,

@@ -10,7 +10,11 @@ from pathlib import Path
 import polars as pl
 
 from pipeline.config import Settings
-from pipeline.ingestion.pricecatcher import download_lookup_snapshot, download_monthly_snapshot
+from pipeline.ingestion.pricecatcher import (
+    download_latest_available_snapshot,
+    download_lookup_snapshot,
+    download_monthly_snapshot,
+)
 from pipeline.insights import build_daily_insight_payload, generate_insight_bundle
 from pipeline.storage.supabase import (
     delete_observations_before,
@@ -118,7 +122,7 @@ def main() -> None:
     elif args.command == "daily-summary":
         raw_dir = Path(args.raw_dir)
         as_of = date.fromisoformat(args.as_of) if args.as_of else date.today()
-        current_result = download_monthly_snapshot(raw_dir, as_of)
+        current_result = download_latest_available_snapshot(raw_dir, as_of)
         previous_result = download_monthly_snapshot(raw_dir, previous_month(as_of))
         item_result = download_lookup_snapshot("item", raw_dir)
         premise_result = download_lookup_snapshot("premise", raw_dir)

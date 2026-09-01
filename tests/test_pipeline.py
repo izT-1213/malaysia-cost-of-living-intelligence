@@ -2,8 +2,9 @@ from datetime import date
 
 import polars as pl
 import pytest
+import httpx
 
-from pipeline.ingestion.pricecatcher import monthly_url
+from pipeline.ingestion.pricecatcher import download_latest_available_snapshot, monthly_url
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
 from pipeline.quality.pricecatcher import validate_observations
 from pipeline.storage.supabase import load_item_area_summary
@@ -59,6 +60,25 @@ def test_pricecatcher_monthly_url_is_deterministic():
     assert monthly_url(date(2026, 8, 20)) == (
         "https://storage.data.gov.my/pricecatcher/pricecatcher_2026-08.parquet"
     )
+
+
+def test_latest_available_snapshot_falls_back_to_previous_month(tmp_path, monkeypatch):
+    requested = date(2026, 9, 1)
+    calls = []
+
+    def fake_download(raw_dir, value, timeout_seconds):
+        calls.append(value)
+        if value.month == 9:
+            request = httpx.Request("GET", "https://example.test/ september")
+            response = httpx.Response(404, request=request)
+            raise httpx.HTTPStatusError("not published", request=request, response=response)
+        return object()
+
+    monkeypatch.setattr("pipeline.ingestion.pricecatcher.download_monthly_snapshot", fake_download)
+    result = download_latest_available_snapshot(tmp_path, requested)
+
+    assert result is not None
+    assert calls == [date(2026, 9, 1), date(2026, 8, 1)]
 
 
 def test_enrich_observations_joins_official_lookup_fields():
