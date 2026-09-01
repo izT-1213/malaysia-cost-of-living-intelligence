@@ -62,6 +62,64 @@ let dailyDateForPremise = "";
 let dailyStartDateForPremise = "";
 let aiInsightBundle = { general: "", states: {} };
 
+function insightStateRecord(state) {
+  return Array.isArray(aiInsightBundle.states)
+    ? aiInsightBundle.states.find((row) => row.state === state)
+    : null;
+}
+
+function coverageLabel(items, total, days) {
+  if (!items || !total) return "Coverage unavailable";
+  if (items < total) return "Partial basket";
+  if (days < 3) return "Limited coverage";
+  if (days < 7) return "Good coverage · fewer than 7 days";
+  return "Strong coverage";
+}
+
+function renderAiGeneralFacts() {
+  const target = document.querySelector("#ai-general-facts");
+  const basket = aiInsightBundle.reference_basket;
+  if (!target || !basket) {
+    if (target) target.innerHTML = '<p class="chart-empty">Coverage details are not available for this insight yet.</p>';
+    return;
+  }
+  const lowCoverage = basket.complete_baskets_with_fewer_than_7_days || [];
+  const lowCoverageCopy = lowCoverage.length
+    ? `${lowCoverage.length} state${lowCoverage.length === 1 ? "" : "s"} use fewer than 7 observed days`
+    : "All complete states use 7 observed days";
+  target.innerHTML = [
+    ["Complete states", basket.complete_states, "All reference items available"],
+    ["Basket reference", money(Number(basket.basket_median_reference)), "Median across complete states"],
+    ["Window", basket.period || "Latest 7 days", "Available observation dates"],
+    ["Coverage note", lowCoverage.length ? "Limited" : "Strong", lowCoverageCopy],
+  ].map(([label, value, caption]) => `<article class="ai-fact"><span class="metric-label">${label}</span><strong>${value}</strong><small>${caption}</small></article>`).join("");
+}
+
+function renderStateDetailFacts(record) {
+  const facts = document.querySelector("#state-detail-facts");
+  const breakdown = document.querySelector("#state-component-breakdown");
+  if (!facts || !breakdown) return;
+  if (!record) {
+    facts.innerHTML = "";
+    breakdown.innerHTML = "";
+    return;
+  }
+  const items = record.reference_basket_items_observed;
+  const total = record.reference_basket_items_total;
+  const days = record.reference_basket_days_observed;
+  const change = record.basket_change_7d;
+  facts.innerHTML = [
+    ["Coverage", `${items ?? "—"}/${total ?? "—"} items`, `${days ?? "—"}/7 observed days`],
+    ["Confidence", coverageLabel(items, total, days), "Interpretation guide"],
+    ["Seven-day change", change == null ? "—" : `${change >= 0 ? "+" : ""}${money(change)}`, "RM vs prior window"],
+    ["Basket position", record.basket_difference_from_reference == null ? "—" : `${record.basket_difference_from_reference >= 0 ? "+" : ""}${money(record.basket_difference_from_reference)}`, "Against cross-state reference"],
+  ].map(([label, value, caption]) => `<article class="ai-fact"><span class="metric-label">${label}</span><strong>${value}</strong><small>${caption}</small></article>`).join("");
+  const components = Object.entries(record.component_prices || {}).sort((a, b) => b[1] - a[1]);
+  breakdown.innerHTML = components.length
+    ? `<div class="subchart-heading"><p class="eyebrow">Basket composition</p><span>Component medians · RM</span></div>${components.map(([label, value]) => `<div class="bar-row"><span class="bar-label">${label}</span><div class="bar-track"><i style="width:${(value / Math.max(...components.map((entry) => entry[1]))) * 100}%"></i></div><strong>${money(Number(value))}</strong></div>`).join("")}`
+    : "";
+}
+
 function replaceOptions(select, values) {
   const first = select.querySelector("option").cloneNode(true);
   select.replaceChildren(first);
@@ -88,11 +146,13 @@ function stateRowsForInsight() {
 
 function showStateInsight(state) {
   const rows = stateRowsForInsight().filter((row) => row.state === state);
-  const storedValue = aiInsightBundle.states?.find?.((row) => row.state === state)?.basket_median;
+  const record = insightStateRecord(state);
+  const storedValue = record?.basket_median;
   const median = storedValue ?? (rows.length ? rows.reduce((sum, row) => sum + row.median, 0) / rows.length : null);
   document.querySelector("#state-detail-name").textContent = state || "Select a state";
   document.querySelector("#state-detail-value").textContent = median === null ? "—" : money(median);
   document.querySelector("#state-detail-copy").textContent = aiInsightBundle.state_insights?.[state] || aiInsightBundle.states?.[state] || "No stored state insight is available for this selection yet.";
+  renderStateDetailFacts(record);
   document.querySelectorAll(".map-state").forEach((button) => button.classList.toggle("selected", button.dataset.state === state));
   renderStatePremiseAnalysis(state);
 }
@@ -724,6 +784,7 @@ async function loadSupabaseData() {
     const generalInsight = aiInsightBundle.general || latestInsight?.generated_text || "No generated insight is available yet.";
     document.querySelector("#ai-insight-copy").textContent = generalInsight;
     document.querySelector("#ai-general-copy").textContent = generalInsight;
+    renderAiGeneralFacts();
     document.querySelector("#ai-general-meta").textContent = latestInsight ? `Stored ${latestInsight.insight_date} · ${latestInsight.provider || "rule-based"} explanation` : "Insights are generated from stored summaries, not when this page opens.";
   } catch (error) {
     console.warn("AI insight is not available; structured metrics remain available.", error);
