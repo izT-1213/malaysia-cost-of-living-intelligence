@@ -63,7 +63,7 @@
           <label>
             <span>Period</span>
             <select id="period-filter">
-              <option value="daily">Latest 7 days</option>
+              <option value="daily">Latest 14 days</option>
               <option value="monthly">Monthly view</option>
             </select>
           </label>
@@ -132,9 +132,18 @@
         <section class="panel chart-panel" id="state-basket-chart-panel" aria-label="Reference basket cost by state">
           <div class="panel-heading">
             <div><p class="eyebrow">Comparison chart</p><h2>Reference basket cost by state</h2></div>
-            <span class="trend-badge">RM · Complete baskets · Latest 7 days</span>
+            <span class="trend-badge">RM · Complete baskets · Latest 14 days</span>
           </div>
           <div class="bar-chart" id="state-basket-chart"></div>
+        </section>
+
+        <section class="panel chart-panel basket-trend-panel" id="basket-trend-panel" aria-label="Reference basket cost over time">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Basket movement</p><h2 id="basket-trend-title">Reference basket cost over time</h2></div>
+            <span class="trend-badge" id="basket-trend-badge">RM · Daily · Latest 14 days</span>
+          </div>
+          <p class="chart-subtitle" id="basket-trend-subtitle">Median complete basket across states. Only areas with every reference-basket component are included.</p>
+          <div class="basket-trend-chart" id="basket-trend-chart"></div>
         </section>
 
         <section class="panel table-panel">

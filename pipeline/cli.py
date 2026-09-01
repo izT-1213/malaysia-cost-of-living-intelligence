@@ -172,6 +172,17 @@ def main() -> None:
         daily_count = load_item_area_summary(
             client, daily, "daily_item_area_summary", source_hash, args.batch_size
         )
+        monthly_current = summarize_item_area(
+            enrich_observations(
+                current,
+                pl.read_parquet(item_result.destination),
+                pl.read_parquet(premise_result.destination),
+            ),
+            period="monthly",
+        )
+        monthly_count = load_item_area_summary(
+            client, monthly_current, "monthly_item_area_summary", current_result.sha256, args.batch_size
+        )
         premise_daily = summarize_item_premise(
             recent_window(enriched, as_of, days=PREMISE_DETAIL_WINDOW_DAYS)
         )
@@ -192,7 +203,8 @@ def main() -> None:
         load_ai_insight(client, as_of, insight_payload_with_status, insight_bundle["general"], insight_provider, insight_model)
         print(
             f"Daily summary load complete: {item_count:,} items, {premise_count:,} premises, "
-            f"{daily_count:,} area summaries and {premise_summary_count:,} premise summaries across {args.days} days; "
+            f"{daily_count:,} daily, {monthly_count:,} monthly area summaries and "
+            f"{premise_summary_count:,} premise summaries across {args.days} days; "
             f"insight provider: {insight_provider}"
         )
     elif args.command == "backfill-month":

@@ -11,6 +11,7 @@ const demoObservations = [
 
 let observations = [...demoObservations];
 const datasets = { daily: [], monthly: [] };
+let monthlyHistory = [];
 let supabaseLoaded = false;
 let districts = {
   Selangor: ["Petaling", "Gombak", "Klang"], Johor: ["Johor Bahru", "Batu Pahat"],
@@ -72,7 +73,7 @@ function coverageLabel(items, total, days) {
   if (!items || !total) return "Coverage unavailable";
   if (items < total) return "Partial basket";
   if (days < 3) return "Limited coverage";
-  if (days < 7) return "Good coverage · fewer than 7 days";
+  if (days < 14) return "Good coverage · fewer than 14 days";
   return "Strong coverage";
 }
 
@@ -83,14 +84,16 @@ function renderAiGeneralFacts() {
     if (target) target.innerHTML = '<p class="chart-empty">Coverage details are not available for this insight yet.</p>';
     return;
   }
-  const lowCoverage = basket.complete_baskets_with_fewer_than_7_days || [];
+  const lowCoverage = basket.complete_baskets_with_fewer_than_14_days
+    || basket.complete_baskets_with_fewer_than_7_days
+    || [];
   const lowCoverageCopy = lowCoverage.length
-    ? `${lowCoverage.length} state${lowCoverage.length === 1 ? "" : "s"} use fewer than 7 observed days`
-    : "All complete states use 7 observed days";
+    ? `${lowCoverage.length} state${lowCoverage.length === 1 ? "" : "s"} use fewer than 14 observed days`
+    : "All complete states use 14 observed days";
   target.innerHTML = [
     ["Complete states", basket.complete_states, "All reference items available"],
     ["Basket reference", money(Number(basket.basket_median_reference)), "Median across complete states"],
-    ["Window", basket.period || "Latest 7 days", "Available observation dates"],
+    ["Window", basket.period || "Latest 14 days", "Available observation dates"],
     ["Coverage note", lowCoverage.length ? "Limited" : "Strong", lowCoverageCopy],
   ].map(([label, value, caption]) => `<article class="ai-fact"><span class="metric-label">${label}</span><strong>${value}</strong><small>${caption}</small></article>`).join("");
 }
@@ -107,11 +110,11 @@ function renderStateDetailFacts(record) {
   const items = record.reference_basket_items_observed;
   const total = record.reference_basket_items_total;
   const days = record.reference_basket_days_observed;
-  const change = record.basket_change_7d;
+  const change = record.basket_change_14d ?? record.basket_change_7d;
   facts.innerHTML = [
-    ["Coverage", `${items ?? "—"}/${total ?? "—"} items`, `${days ?? "—"}/7 observed days`],
+    ["Coverage", `${items ?? "—"}/${total ?? "—"} items`, `${days ?? "—"}/14 observed days`],
     ["Confidence", coverageLabel(items, total, days), "Interpretation guide"],
-    ["Seven-day change", change == null ? "—" : `${change >= 0 ? "+" : ""}${money(change)}`, "RM vs prior window"],
+    ["Fourteen-day change", change == null ? "—" : `${change >= 0 ? "+" : ""}${money(change)}`, "RM vs prior window"],
     ["Basket position", record.basket_difference_from_reference == null ? "—" : `${record.basket_difference_from_reference >= 0 ? "+" : ""}${money(record.basket_difference_from_reference)}`, "Against cross-state reference"],
   ].map(([label, value, caption]) => `<article class="ai-fact"><span class="metric-label">${label}</span><strong>${value}</strong><small>${caption}</small></article>`).join("");
   const components = Object.entries(record.component_prices || {}).sort((a, b) => b[1] - a[1]);
@@ -243,7 +246,7 @@ function renderStatePremiseAnalysis(state) {
     <div class="bar-row"><span class="bar-label">${row.premise || `Premise ${row.premiseCode}`}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i></div><strong>${money(row.median)}</strong></div>`).join("")}`;
   const trendRows = stateBasketTrendRows(state);
   const trendMax = trendRows.length ? Math.max(...trendRows.map((row) => row.median)) : 0;
-  trend.innerHTML = `<div class="subchart-heading"><p class="eyebrow">Seven-day movement</p><span>Complete basket median · RM</span></div>${trendRows.length ? `<div class="mini-trend">${trendRows.map((row) => `<div class="mini-trend-column"><strong>${money(row.median)}</strong><i style="height:${(row.median / trendMax) * 100}%"></i><small>${row.date.slice(5)}</small></div>`).join("")}</div>` : '<p class="chart-empty">Not enough complete daily baskets for a trend.</p>'}`;
+  trend.innerHTML = `<div class="subchart-heading"><p class="eyebrow">Fourteen-day movement</p><span>Complete basket median · RM</span></div>${trendRows.length ? `<div class="mini-trend">${trendRows.map((row) => `<div class="mini-trend-column"><strong>${money(row.median)}</strong><i style="height:${(row.median / trendMax) * 100}%"></i><small>${row.date.slice(5)}</small></div>`).join("")}</div>` : '<p class="chart-empty">Not enough complete daily baskets for a trend.</p>'}`;
   tableBody.innerHTML = rows.slice(0, 10).map((row) => `<tr><th scope="row">${row.premise || `Premise ${row.premiseCode}`}</th><td>${row.district || "—"}</td><td>${money(row.median)}</td></tr>`).join("");
 }
 
@@ -457,6 +460,51 @@ function renderStateBasketChart(rows) {
     <div class="bar-row"><span class="bar-label">${row.state}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i></div><strong>${money(row.median)}</strong></div>`).join("");
 }
 
+function basketTrendRows(period) {
+  const source = period === "monthly" ? monthlyHistory : datasets.daily;
+  const areaRows = source.filter((row) => row.areaLevel === "state");
+  const periods = [...new Set(areaRows.map((row) => row.metricDate))].sort();
+  return periods.map((metricDate) => {
+    const periodRows = areaRows.filter((row) => row.metricDate === metricDate);
+    const baskets = [...new Set(periodRows.map((row) => row.state))].map((state) => {
+      const stateRows = periodRows.filter((row) => row.state === state);
+      const components = basketComponents.map((component) => {
+        const matches = stateRows.filter((row) => component.itemCodes.includes(row.itemCode));
+        return matches.length ? medianOf(matches.map((row) => row.median)) : null;
+      });
+      return components.every((value) => value !== null)
+        ? components.reduce((sum, value) => sum + value, 0)
+        : null;
+    }).filter((value) => value !== null);
+    return baskets.length ? { metricDate, median: medianOf(baskets), areas: baskets.length } : null;
+  }).filter(Boolean);
+}
+
+function renderBasketTrendChart() {
+  const chart = document.querySelector("#basket-trend-chart");
+  const period = document.querySelector("#period-filter")?.value || "daily";
+  if (!chart) return;
+  const rows = basketTrendRows(period);
+  const title = document.querySelector("#basket-trend-title");
+  const badge = document.querySelector("#basket-trend-badge");
+  const subtitle = document.querySelector("#basket-trend-subtitle");
+  if (period === "monthly") {
+    title.textContent = "Reference basket cost by month";
+    badge.textContent = "RM · Monthly · Recent 12 months";
+    subtitle.textContent = "Median complete basket across states for each month. Only areas with every reference-basket component are included.";
+  } else {
+    title.textContent = "Reference basket cost over time";
+    badge.textContent = "RM · Daily · Latest 14 days";
+    subtitle.textContent = "Median complete basket across states for each available date. Missing dates are not treated as zero.";
+  }
+  if (!rows.length) {
+    chart.innerHTML = '<p class="chart-empty">No complete basket trend is available for this period yet.</p>';
+    return;
+  }
+  const max = Math.max(...rows.map((row) => row.median));
+  chart.innerHTML = rows.map((row) => `<div class="basket-trend-column" title="${row.areas} complete areas"><strong>${money(row.median)}</strong><i style="height:${Math.max((row.median / max) * 100, 8)}%"></i><small>${period === "monthly" ? row.metricDate.slice(0, 7) : row.metricDate.slice(5)}</small></div>`).join("");
+}
+
 function medianOf(values) {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -499,7 +547,7 @@ function renderTable(rows) {
         <td>${money(row.median)}</td>
         <td>${row.difference === 0 ? "—" : `${row.difference > 0 ? "+" : "−"}${money(Math.abs(row.difference))}`}</td>
         <td>${componentCount}/${componentCount}</td>
-        <td>Latest 7 days</td>
+        <td>Latest 14 days</td>
       </tr>`).join("");
     return;
   }
@@ -556,15 +604,17 @@ function render() {
     document.querySelector(".signal-number").textContent = "—";
     document.querySelector(".insight-panel h2").textContent = basketMode ? "No complete basket yet" : "No matching observations";
     document.querySelector(".signal-copy").textContent = basketMode
-      ? "The source has daily observations, but no selected area has every item in this basket across the latest seven-day window. Try Monthly view or adjust the filters."
+      ? "The source has daily observations, but no selected area has every item in this basket across the latest fourteen-day window. Try Monthly view or adjust the filters."
       : "There are no observations for the selected item and area. Try another filter or period.";
     document.querySelector("#table-title").textContent = basketMode ? "Basket availability" : "No matching observations";
-    table.innerHTML = `<tr><td colspan="5">${basketMode ? "Daily data is available, but no area has a complete reference basket in the latest seven-day window." : "No rows match the current filters."}</td></tr>`;
+    table.innerHTML = `<tr><td colspan="5">${basketMode ? "Daily data is available, but no area has a complete reference basket in the latest fourteen-day window." : "No rows match the current filters."}</td></tr>`;
     renderStateBasketChart([]);
+    renderBasketTrendChart();
     return;
   }
   renderMetrics(rows);
   renderStateBasketChart(rows);
+  renderBasketTrendChart();
   renderTable(rows);
   const basketMode = viewFilter.value !== "item";
   const low = basketMode ? Math.min(...rows.map((row) => row.median)) : Math.min(...rows.map((row) => row.min));
@@ -617,7 +667,7 @@ document.querySelector("#period-filter").addEventListener("change", (event) => {
   replaceOptions(customCategory, availableCustomItems().map((item) => item.item_category));
   populateCustomItemOptions();
   document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Latest available prices";
-  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
+  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 14 days";
   populateFilters();
   render();
 });
@@ -675,7 +725,7 @@ document.querySelector("#reset-filters").addEventListener("click", () => {
   populateCustomItemOptions();
   populateCustomLocationFilters();
   document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Latest available prices";
-  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
+  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 14 days";
   render();
 });
 document.querySelector("#download-button").addEventListener("click", () => {
@@ -771,15 +821,18 @@ async function loadSupabaseData() {
   const monthlyDate = latestMonthly[0]?.metric_month;
   document.querySelector(".hero-note > span:last-child").textContent = formatMetricDate(dailyDate);
   const dailyStart = dailyDate ? new Date(`${dailyDate}T00:00:00Z`) : null;
-  if (dailyStart) dailyStart.setUTCDate(dailyStart.getUTCDate() - 6);
+  if (dailyStart) dailyStart.setUTCDate(dailyStart.getUTCDate() - 13);
   const dailyStartDate = dailyStart ? dailyStart.toISOString().slice(0, 10) : "";
-  const premiseStart = dailyDate ? new Date(`${dailyDate}T00:00:00Z`) : null;
-  if (premiseStart) premiseStart.setUTCDate(premiseStart.getUTCDate() - 13);
-  const premiseStartDate = premiseStart ? premiseStart.toISOString().slice(0, 10) : "";
   dailyDateForPremise = dailyDate || "";
-  dailyStartDateForPremise = premiseStartDate;
+  dailyStartDateForPremise = dailyStartDate;
   const daily = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDate}&metric_date=lte.${dailyDate}&order=metric_date.asc,state.asc,item_code.asc`) : [];
   const monthly = monthlyDate ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc`) : [];
+  const monthlyHistoryStart = monthlyDate ? new Date(`${monthlyDate}T00:00:00Z`) : null;
+  if (monthlyHistoryStart) monthlyHistoryStart.setUTCMonth(monthlyHistoryStart.getUTCMonth() - 11);
+  const monthlyHistoryStartDate = monthlyHistoryStart ? monthlyHistoryStart.toISOString().slice(0, 10) : "";
+  const monthlyHistoryRows = monthlyDate
+    ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=gte.${monthlyHistoryStartDate}&metric_month=lte.${monthlyDate}&order=metric_month.asc,state.asc,item_code.asc`)
+    : [];
   try {
     const insights = await supabaseGet("ai_insights?select=generated_text,provider,insight_date,analytical_payload&insight_type=eq.daily_summary&order=insight_date.desc&limit=1");
     const latestInsight = insights[0];
@@ -800,6 +853,7 @@ async function loadSupabaseData() {
   const districtLookup = await supabaseGetAll(`${districtTable}?select=state,district&area_level=eq.district&${districtDateFilter}&order=state.asc,district.asc`);
   datasets.daily = toRows(daily, itemNames);
   datasets.monthly = toRows(monthly, itemNames);
+  monthlyHistory = toRows(monthlyHistoryRows, itemNames);
   supabaseLoaded = true;
   const periodFilter = document.querySelector("#period-filter");
   if (periodFilter.value === "daily" && !datasets.daily.length) periodFilter.value = "monthly";
@@ -808,7 +862,7 @@ async function loadSupabaseData() {
   populateCustomItemOptions();
   populateCustomLocationFilters();
   document.querySelector(".hero-note strong").textContent = periodFilter.value === "monthly" ? "Monthly item prices" : "Latest available prices";
-  document.querySelector(".trend-badge").textContent = periodFilter.value === "monthly" ? "Historical month" : "Latest 7 days";
+  document.querySelector(".trend-badge").textContent = periodFilter.value === "monthly" ? "Historical month" : "Latest 14 days";
   districts = {};
   districtLookup.forEach((row) => {
     if (row.district) districts[row.state] = [...new Set([...(districts[row.state] || []), row.district])];
