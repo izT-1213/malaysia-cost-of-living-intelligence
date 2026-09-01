@@ -414,10 +414,35 @@ def generate_insight_bundle(
             model,
             {
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"responseMimeType": "application/json", "temperature": 0.3},
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "temperature": 0.3,
+                },
             },
         )
-        response_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        response_body = response.json()
+        candidates = response_body.get("candidates", [])
+        if not candidates:
+            prompt_feedback = response_body.get("promptFeedback", {})
+            raise ValueError(
+                "response had no candidates; "
+                f"prompt_feedback={json.dumps(prompt_feedback, separators=(',', ':'))[:180]}"
+            )
+        candidate = candidates[0]
+        parts = candidate.get("content", {}).get("parts", [])
+        response_text = next(
+            (
+                part.get("text")
+                for part in parts
+                if isinstance(part, dict) and isinstance(part.get("text"), str)
+            ),
+            None,
+        )
+        if not response_text:
+            raise ValueError(
+                "response had no text; "
+                f"finish_reason={candidate.get('finishReason', 'unknown')}"
+            )
         bundle = _parse_gemini_bundle(response_text)
         return bundle, "gemini", model, None
     except httpx.HTTPStatusError as error:
