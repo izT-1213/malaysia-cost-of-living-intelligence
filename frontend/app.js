@@ -210,7 +210,7 @@ function structuredReferenceBasketValue(rows) {
       ? roundCurrency(components.reduce((sum, value) => sum + value, 0))
       : null;
   }).filter((value) => value !== null);
-  return baskets.length ? medianOf(baskets) : null;
+  return baskets.length ? roundCurrency(medianOf(baskets)) : null;
 }
 
 function monthlyCompleteStateRows(rows) {
@@ -556,7 +556,9 @@ function latestComparableRows(rows) {
 function renderMetrics(rows) {
   const basketMode = viewFilter.value !== "item";
   const customMode = viewFilter.value === "custom";
-  const median = basketMode ? medianOf(rows.map((row) => row.median)) : rows.reduce((sum, row) => sum + row.median, 0) / rows.length;
+  const median = basketMode
+    ? roundCurrency(medianOf(rows.map((row) => row.median)))
+    : rows.reduce((sum, row) => sum + row.median, 0) / rows.length;
   const min = basketMode ? Math.min(...rows.map((row) => row.median)) : Math.min(...rows.map((row) => row.min));
   const max = basketMode ? Math.max(...rows.map((row) => row.median)) : Math.max(...rows.map((row) => row.max));
   document.querySelector("#median-label").textContent = basketMode ? (customMode ? "Custom basket cost" : "Your 10-item basket costs") : "Median item price";
