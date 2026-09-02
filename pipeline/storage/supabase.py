@@ -101,6 +101,11 @@ def delete_monthly_summaries_before(client: Client, cutoff: date) -> None:
     client.table("monthly_item_area_summary").delete().lt("metric_month", cutoff.isoformat()).execute()
 
 
+def delete_daily_basket_summaries_before(client: Client, cutoff: date) -> None:
+    """Remove canonical basket summaries older than the rolling daily window."""
+    client.table("daily_basket_summary").delete().lt("metric_date", cutoff.isoformat()).execute()
+
+
 def load_item_area_summary(
     client: Client,
     frame: pl.DataFrame,
@@ -173,6 +178,35 @@ def load_item_premise_summary(client: Client, frame: pl.DataFrame, source_sha256
         submitted += len(batch)
         if batch_number == 1 or batch_number % 10 == 0 or batch_number == total_batches:
             print(f"Premise summary upload: {submitted:,}/{len(rows):,} rows", flush=True)
+    return submitted
+
+
+def load_daily_basket_summary(
+    client: Client,
+    metric_date: date,
+    state_rows: list[dict[str, Any]],
+    source_sha256: str,
+    batch_size: int = 500,
+) -> int:
+    """Upsert the canonical reference-basket totals used by all live surfaces."""
+    rows = [
+        {
+            "metric_date": metric_date.isoformat(),
+            "state": row["state"],
+            "basket_median": float(row["basket_median"]),
+            "component_prices": row.get("component_prices", {}),
+            "reference_basket_items_observed": int(row.get("reference_basket_items_observed", 0)),
+            "reference_basket_items_total": int(row.get("reference_basket_items_total", 0)),
+            "reference_basket_days_observed": int(row.get("reference_basket_days_observed", 0)),
+            "source_snapshot_sha256": source_sha256,
+        }
+        for row in state_rows
+        if row.get("basket_median") is not None
+    ]
+    submitted = 0
+    for batch in _chunks(rows, batch_size):
+        client.table("daily_basket_summary").upsert(batch, on_conflict="metric_date,state").execute()
+        submitted += len(batch)
     return submitted
 
 
