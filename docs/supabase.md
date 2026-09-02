@@ -2,6 +2,8 @@
 
 Supabase is the application database and serving layer. The scheduled free-tier setup keeps source files only in the temporary GitHub Actions workspace while a run is executing; it stores lookup data, source metadata, and compact summaries in PostgreSQL. Raw observations are optional and disabled by default.
 
+The serving retention policy is 30 days of compact daily area summaries, 7 days of premise-level summaries, and 6 calendar months of monthly summaries. The public dashboard currently reads the latest 7 daily days; the extra daily-summary history supports rolling-window rebuilds, late-arriving data, and future 30-day comparisons without requiring raw observations in Supabase.
+
 ## Local setup
 
 1. Create a Supabase project.

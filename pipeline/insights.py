@@ -45,6 +45,15 @@ REFERENCE_BASKET_RULES = [
 ]
 
 
+def _median(values: list[float]) -> float:
+    """Return a deterministic median for a non-empty list."""
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+
 def build_daily_insight_payload(
     summary: pl.DataFrame, as_of: date, item_lookup: pl.DataFrame | None = None
 ) -> dict[str, Any]:
@@ -193,7 +202,7 @@ def build_daily_insight_payload(
 
         basket_rows = basket_rows_for(latest)
         if basket_rows:
-            basket_reference = sum(row["basket_median"] for row in basket_rows) / len(basket_rows)
+            basket_reference = _median([row["basket_median"] for row in basket_rows])
             previous_rows = basket_rows_for(
                 state_rows.filter(
                     pl.col("metric_date").is_between(
@@ -207,7 +216,10 @@ def build_daily_insight_payload(
             payload["reference_basket"] = {
                 "components": [label for label, *_ in REFERENCE_BASKET_RULES],
                 "complete_states": len(basket_rows),
-                "period": f"latest {min(INSIGHT_WINDOW_DAYS, latest.select(pl.col('metric_date').n_unique()).item())} days",
+                "period": (
+                    f"{INSIGHT_WINDOW_DAYS} calendar days ending {latest_date.isoformat()} "
+                    f"({latest.select(pl.col('metric_date').n_unique()).item()} observed days)"
+                ),
                 "basket_median_reference": round(basket_reference, 2),
                 "previous_period": f"prior {INSIGHT_WINDOW_DAYS} days",
                 "lowest": min(basket_rows, key=lambda row: (row["basket_median"], row["state"])),
@@ -285,7 +297,7 @@ def fallback_state_explanations(payload: dict[str, Any]) -> dict[str, str]:
     if not states:
         return {}
     value_key = "basket_median" if all(row.get("basket_median") is not None for row in states) else "median_price"
-    median = sum(float(row[value_key]) for row in states) / len(states)
+    median = _median([float(row[value_key]) for row in states])
     return {
         row["state"]: (
             f"{row['state']} has a complete reference-basket median of RM {row[value_key]:.2f}. "
