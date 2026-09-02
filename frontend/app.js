@@ -199,6 +199,9 @@ function metricWindowLabel(period = document.querySelector("#period-filter")?.va
 }
 
 function structuredReferenceBasketValue(rows) {
+  if (canonicalDailyBasketRows.length) {
+    return roundCurrency(medianOf(canonicalDailyBasketRows.map((row) => Number(row.basket_median))));
+  }
   const stateRows = rows.filter((row) => row.areaLevel === "state");
   const baskets = [...new Set(stateRows.map((row) => row.state))].map((state) => {
     const windowRows = latestWindowRows(stateRows.filter((row) => row.state === state));
