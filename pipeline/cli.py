@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 from datetime import date, timedelta
 from pathlib import Path
@@ -15,19 +16,23 @@ from pipeline.ingestion.pricecatcher import (
     download_lookup_snapshot,
     download_monthly_snapshot,
 )
-from pipeline.insights import build_daily_insight_payload, generate_insight_bundle
+from pipeline.insights import (
+    REFERENCE_BASKET_RULES,
+    build_daily_insight_payload,
+    generate_insight_bundle,
+)
 from pipeline.storage.supabase import (
-    delete_observations_before,
     delete_daily_basket_summaries_before,
     delete_monthly_summaries_before,
+    delete_observations_before,
     delete_premise_summaries_before,
     get_client,
-    load_item_area_summary,
-    load_lookup,
-    load_observations,
     load_ai_insight,
     load_daily_basket_summary,
+    load_item_area_summary,
     load_item_premise_summary,
+    load_lookup,
+    load_observations,
     load_source_snapshot,
 )
 from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise
@@ -38,7 +43,6 @@ from pipeline.summaries.windows import (
 )
 from pipeline.transforms.enrich import enrich_observations
 from pipeline.transforms.pricecatcher import normalize_columns
-
 
 PREMISE_DETAIL_WINDOW_DAYS = 7
 MONTHLY_SUMMARY_RETENTION_MONTHS = 6
@@ -110,6 +114,7 @@ def main() -> None:
             print(f"Downloaded {lookup_name} lookup ({result.bytes_downloaded:,} bytes) to {result.destination}")
     elif args.command == "daily":
         raw_dir = Path(args.raw_dir)
+        as_of = date.today()
         price_result = download_monthly_snapshot(raw_dir)
         item_result = download_lookup_snapshot("item", raw_dir)
         premise_result = download_lookup_snapshot("premise", raw_dir)
@@ -202,7 +207,24 @@ def main() -> None:
         )
         premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
         item_lookup_frame = pl.read_parquet(item_result.destination)
-        insight_payload = build_daily_insight_payload(daily, as_of, item_lookup_frame)
+        component_codes = []
+        for _, category, unit, name_rule in REFERENCE_BASKET_RULES:
+            component_codes.append({
+                int(row["item_code"])
+                for row in item_lookup_frame.to_dicts()
+                if str(row.get("item_category")) == category
+                and str(row.get("unit", "")).strip().lower() == unit.lower()
+                and name_rule(str(row.get("item", "")).upper())
+            })
+        complete_premise_count = sum(
+            all(any(int(row["item_code"]) in codes for row in premise_rows) for codes in component_codes)
+            for _, premise_rows in itertools.groupby(
+                premise_daily.sort("premise_code").to_dicts(), key=lambda row: row["premise_code"]
+            )
+        )
+        insight_payload = build_daily_insight_payload(
+            daily, as_of, item_lookup_frame, complete_premise_count
+        )
         canonical_metric_date = date.fromisoformat(insight_payload["latest_metric_date"])
         canonical_basket_count = load_daily_basket_summary(
             client,
@@ -211,6 +233,7 @@ def main() -> None:
             insight_payload["reference_basket"]["basket_median_reference"],
             source_hash,
             args.batch_size,
+            insight_payload["metric_snapshot_id"],
         )
         insight_bundle, insight_provider, insight_model, insight_failure_reason = generate_insight_bundle(insight_payload)
         insight_payload_with_status = {

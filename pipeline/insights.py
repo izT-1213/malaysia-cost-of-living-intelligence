@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import os
+import hashlib
 import json
+import os
 import time
 from datetime import date, timedelta
 from typing import Any, Protocol
@@ -11,12 +12,12 @@ from typing import Any, Protocol
 import httpx
 import polars as pl
 
-
 GEMINI_REQUEST_TIMEOUT_SECONDS = 90.0
 GEMINI_MAX_ATTEMPTS = 3
 GEMINI_RETRY_DELAY_SECONDS = 2.0
 GEMINI_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 INSIGHT_WINDOW_DAYS = 7
+METRIC_CONTRACT_VERSION = "daily-basket-v2"
 
 
 class InsightProvider(Protocol):
@@ -54,8 +55,17 @@ def _median(values: list[float]) -> float:
     return (ordered[middle - 1] + ordered[middle]) / 2
 
 
+def metric_snapshot_id(contract: dict[str, Any]) -> str:
+    """Return a stable identity for the validated metric contract."""
+    encoded = json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def build_daily_insight_payload(
-    summary: pl.DataFrame, as_of: date, item_lookup: pl.DataFrame | None = None
+    summary: pl.DataFrame,
+    as_of: date,
+    item_lookup: pl.DataFrame | None = None,
+    complete_premise_count: int = 0,
 ) -> dict[str, Any]:
     """Create a small, deterministic payload for an optional explanation."""
     state_rows = summary.filter(pl.col("area_level") == "state")
@@ -257,6 +267,23 @@ def build_daily_insight_payload(
                 }
                 for row in payload["states"]
             ]
+    basket = payload.get("reference_basket", {})
+    observed_dates = sorted(latest.get_column("metric_date").unique().to_list()) if latest.height else []
+    contract = {
+        "contract_version": METRIC_CONTRACT_VERSION,
+        "period": "daily",
+        "calendar_window_days": INSIGHT_WINDOW_DAYS,
+        "window_start": window_start.isoformat() if window_start else None,
+        "window_end": latest_date.isoformat() if latest_date else None,
+        "observed_dates": [value.isoformat() for value in observed_dates],
+        "observed_day_count": len(observed_dates),
+        "item_count": len(basket.get("components", [])),
+        "complete_state_count": int(basket.get("complete_states", 0)),
+        "complete_premise_count": complete_premise_count,
+        "basket_median": basket.get("basket_median_reference"),
+    }
+    payload["metric_contract"] = contract
+    payload["metric_snapshot_id"] = metric_snapshot_id(contract)
     return payload
 
 

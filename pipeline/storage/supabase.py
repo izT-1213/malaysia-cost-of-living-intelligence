@@ -188,6 +188,7 @@ def load_daily_basket_summary(
     cross_state_reference: float,
     source_sha256: str,
     batch_size: int = 500,
+    snapshot_id: str | None = None,
 ) -> int:
     """Upsert the canonical reference-basket totals used by all live surfaces."""
     rows = [
@@ -201,6 +202,7 @@ def load_daily_basket_summary(
             "reference_basket_items_total": int(row.get("reference_basket_items_total", 0)),
             "reference_basket_days_observed": int(row.get("reference_basket_days_observed", 0)),
             "source_snapshot_sha256": source_sha256,
+            "metric_snapshot_id": snapshot_id,
         }
         for row in state_rows
         if row.get("basket_median") is not None

@@ -1,13 +1,18 @@
 from datetime import date
 
+import httpx
 import polars as pl
 import pytest
-import httpx
 
 from pipeline.ingestion.pricecatcher import download_latest_available_snapshot, monthly_url
-from pipeline.insights import _is_daily_quota_error, _parse_gemini_bundle, build_daily_insight_payload
+from pipeline.insights import (
+    _is_daily_quota_error,
+    _parse_gemini_bundle,
+    build_daily_insight_payload,
+    metric_snapshot_id,
+)
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
-from pipeline.quality.pricecatcher import validate_observations
+from pipeline.quality.pricecatcher import suspicious_observations, validate_observations
 from pipeline.storage.supabase import load_daily_basket_summary, load_item_area_summary
 from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise
 from pipeline.summaries.windows import combined_source_hash, previous_month, recent_window
@@ -49,6 +54,18 @@ def test_percentage_change_handles_zero_baseline():
 def test_quality_rejects_non_positive_prices():
     frame = pl.DataFrame({"date": [date(2026, 8, 19)], "item_name": ["Rice"], "price": [0.0]})
     assert "price contains non-positive values" in validate_observations(frame)
+
+
+def test_quality_flags_invalid_duplicate_and_extreme_rows_without_filtering_them():
+    frame = pl.DataFrame({
+        "date": [date(2026, 8, 19), date(2026, 8, 19), date(2026, 8, 19), date(2026, 8, 19)],
+        "item_id": [1, 1, 2, 3], "premise_id": [2, 2, 2, 2],
+        "price": [10.0, 10.0, 0.0, 1000.0],
+    })
+    flagged = suspicious_observations(frame)
+    assert flagged.height == 4
+    assert flagged.filter(pl.col("invalid_price")).height == 1
+    assert flagged.filter(pl.col("duplicate_record")).height == 2
 
 
 def test_gemini_bundle_parser_accepts_fenced_state_list():
@@ -234,11 +251,13 @@ def test_canonical_basket_loader_uses_metric_date_and_state_conflict():
         89.03,
         "abc123",
         batch_size=10,
+        snapshot_id="snapshot-1",
     ) == 1
     assert client.table_instance.conflict == "metric_date,state"
     assert client.table_instance.rows[0]["basket_median"] == 89.03
     assert client.table_instance.rows[0]["cross_state_reference"] == 89.03
     assert client.table_instance.rows[0]["source_snapshot_sha256"] == "abc123"
+    assert client.table_instance.rows[0]["metric_snapshot_id"] == "snapshot-1"
 
 
 def test_recent_window_includes_exact_calendar_days():
@@ -296,3 +315,6 @@ def test_daily_insight_basket_uses_shared_window_and_median_reference():
     assert payload["reference_basket"]["basket_median_reference"] == 20.0
     assert payload["reference_basket"]["lowest"]["state"] == "Johor"
     assert payload["reference_basket"]["highest"]["state"] == "Perak"
+    assert payload["metric_contract"]["observed_day_count"] == 7
+    assert payload["metric_contract"]["complete_state_count"] == 3
+    assert payload["metric_snapshot_id"] == metric_snapshot_id(payload["metric_contract"])

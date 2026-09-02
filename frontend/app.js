@@ -76,6 +76,7 @@ let aiInsightStatus = "not loaded";
 let aiLoadPromise = null;
 let monthlyFallback = false;
 let monthlyDisplayDate = "";
+let dailyMetricSnapshotId = "";
 
 function insightStateRecord(state) {
   return Array.isArray(aiInsightBundle.states)
@@ -173,6 +174,14 @@ function setDataStatus(status, message, { retry = false } = {}) {
   banner.setAttribute("aria-busy", status === "loading" ? "true" : "false");
   messageTarget.textContent = message;
   retryButton.hidden = !retry;
+}
+
+function liveDataStatusCopy() {
+  const period = document.querySelector("#period-filter")?.value || "daily";
+  if (period === "monthly") {
+    return `Connected to live data · monthly view: ${monthlyDisplayDate || "pending"}${monthlyFallback ? " · latest complete month fallback" : ""}`;
+  }
+  return `Connected to live data · daily view through ${dailyDateForPremise || "pending"} · ${metricWindowLabel("daily")}`;
 }
 
 function lastSuccessfulCopy() {
@@ -728,9 +737,9 @@ function renderTable(rows) {
   document.querySelector("#table-title").textContent = areaLabel === "state" ? "Prices by state" : "Prices by district";
   document.querySelector("#area-column").textContent = areaLabel === "state" ? "State" : "District";
   document.querySelector("#median-column").textContent = "Median";
-  document.querySelector("#lowest-column").textContent = "Lowest";
-  document.querySelector("#highest-column").textContent = "Highest";
-  document.querySelector("#range-column").textContent = "Range";
+  document.querySelector("#lowest-column").textContent = "Lowest observed";
+  document.querySelector("#highest-column").textContent = "Highest observed";
+  document.querySelector("#range-column").textContent = "Observed range";
   table.innerHTML = grouped.map((row) => `
     <tr>
       <th scope="row">${row.name}</th>
@@ -852,6 +861,7 @@ document.querySelector("#period-filter").addEventListener("change", (event) => {
   document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
   populateFilters();
   render();
+  if (supabaseLoaded) setDataStatus("success", liveDataStatusCopy());
 });
 viewFilter.addEventListener("change", () => {
   const basketMode = viewFilter.value !== "item";
@@ -1018,10 +1028,13 @@ async function loadAiInsight() {
       const payload = latestInsight?.analytical_payload || {};
       const currentReference = structuredReferenceBasketValue(datasets.daily);
       const storedReference = Number(payload.reference_basket?.basket_median_reference);
+      const storedSnapshotId = payload.metric_snapshot_id || "";
       const matchesCurrentData = Boolean(
         latestInsight
         && dailyDateForPremise
         && payload.latest_metric_date === dailyDateForPremise
+        && dailyMetricSnapshotId
+        && storedSnapshotId === dailyMetricSnapshotId
         && currentReference !== null
         && Number.isFinite(storedReference)
         && Math.abs(currentReference - storedReference) < 0.005
@@ -1086,12 +1099,13 @@ async function loadSupabaseData() {
   const daily = dailyPages.flat();
   try {
     canonicalDailyBasketRows = dailyDate
-      ? await supabaseGetAll(`daily_basket_summary?select=metric_date,state,basket_median,cross_state_reference,reference_basket_items_observed,reference_basket_items_total,reference_basket_days_observed&metric_date=eq.${dailyDate}&order=state.asc`)
+      ? await supabaseGetAll(`daily_basket_summary?select=metric_date,state,basket_median,cross_state_reference,reference_basket_items_observed,reference_basket_items_total,reference_basket_days_observed,metric_snapshot_id&metric_date=eq.${dailyDate}&order=state.asc`)
       : [];
   } catch (error) {
     console.warn("Canonical basket summary is unavailable; using detailed summaries.", error);
     canonicalDailyBasketRows = [];
   }
+  dailyMetricSnapshotId = canonicalDailyBasketRows[0]?.metric_snapshot_id || "";
   const dailyDistricts = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&area_level=eq.district&metric_date=eq.${dailyDate}&order=state.asc,district.asc,item_code.asc`) : [];
   const monthlyLatest = monthlyDate ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc`) : [];
   const monthlyHistoryStart = monthlyDate ? new Date(`${monthlyDate}T00:00:00Z`) : null;
@@ -1149,7 +1163,7 @@ async function loadSupabaseData() {
   renderAiGeneralFacts();
   renderAboutQuality();
   renderInsightMap();
-  setDataStatus("success", `Connected to live data · latest daily window through ${dailyDate || "pending"} · ${monthlyDisplayDate ? `monthly ${monthlyDisplayDate}${monthlyFallback ? " · latest complete month fallback" : ""}` : "monthly summary pending"}`);
+  setDataStatus("success", liveDataStatusCopy());
 }
 
 async function loadPremiseData(itemCodes) {
