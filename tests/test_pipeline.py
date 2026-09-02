@@ -8,7 +8,7 @@ from pipeline.ingestion.pricecatcher import download_latest_available_snapshot, 
 from pipeline.insights import _is_daily_quota_error, _parse_gemini_bundle, build_daily_insight_payload
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
 from pipeline.quality.pricecatcher import validate_observations
-from pipeline.storage.supabase import load_item_area_summary
+from pipeline.storage.supabase import load_daily_basket_summary, load_item_area_summary
 from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise
 from pipeline.summaries.windows import combined_source_hash, previous_month, recent_window
 from pipeline.transforms.enrich import enrich_observations
@@ -215,6 +215,27 @@ def test_summary_loader_adds_source_hash_and_uses_composite_conflict():
         client, frame, "daily_item_area_summary", "abc123", batch_size=10
     ) == 1
     assert client.table_instance.conflict == "metric_date,state,district,item_code"
+    assert client.table_instance.rows[0]["source_snapshot_sha256"] == "abc123"
+
+
+def test_canonical_basket_loader_uses_metric_date_and_state_conflict():
+    client = _FakeClient()
+    assert load_daily_basket_summary(
+        client,
+        date(2026, 8, 19),
+        [{
+            "state": "Selangor",
+            "basket_median": 89.03,
+            "component_prices": {"Rice": 26.0},
+            "reference_basket_items_observed": 10,
+            "reference_basket_items_total": 10,
+            "reference_basket_days_observed": 7,
+        }],
+        "abc123",
+        batch_size=10,
+    ) == 1
+    assert client.table_instance.conflict == "metric_date,state"
+    assert client.table_instance.rows[0]["basket_median"] == 89.03
     assert client.table_instance.rows[0]["source_snapshot_sha256"] == "abc123"
 
 

@@ -68,6 +68,7 @@ let premiseLookup = [];
 let premiseObservations = [];
 let premiseDataLoaded = false;
 let premiseDataLoading = false;
+let canonicalDailyBasketRows = [];
 let dailyDateForPremise = "";
 let dailyStartDateForPremise = "";
 let aiInsightBundle = { general: "", states: {} };
@@ -480,6 +481,22 @@ function selectedBasketRows() {
     : basketComponents;
   if (!components.length) return [];
   const level = districtFilter.value === "all" ? "state" : "district";
+  if (viewFilter.value === "basket" && document.querySelector("#period-filter").value === "daily"
+    && level === "state" && canonicalDailyBasketRows.length) {
+    return canonicalDailyBasketRows.filter((row) => stateFilter.value === "all" || row.state === stateFilter.value)
+      .map((row) => ({
+        state: row.state,
+        district: "",
+        areaLevel: "state",
+        item: "Reference grocery basket",
+        itemCode: null,
+        median: Number(row.basket_median),
+        min: Number(row.basket_median),
+        max: Number(row.basket_median),
+        coverage: row.reference_basket_items_total ? row.reference_basket_items_observed / row.reference_basket_items_total : 0,
+        complete: true,
+      }));
+  }
   const candidates = observations.filter((row) => {
     if (row.areaLevel && row.areaLevel !== level) return false;
     if (stateFilter.value !== "all" && row.state !== stateFilter.value) return false;
@@ -1008,6 +1025,14 @@ async function loadSupabaseData() {
     supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&area_level=eq.state&metric_date=eq.${metricDate}&order=state.asc,item_code.asc`)
   ));
   const daily = dailyPages.flat();
+  try {
+    canonicalDailyBasketRows = dailyDate
+      ? await supabaseGetAll(`daily_basket_summary?select=metric_date,state,basket_median,reference_basket_items_observed,reference_basket_items_total,reference_basket_days_observed&metric_date=eq.${dailyDate}&order=state.asc`)
+      : [];
+  } catch (error) {
+    console.warn("Canonical basket summary is unavailable; using detailed summaries.", error);
+    canonicalDailyBasketRows = [];
+  }
   const dailyDistricts = dailyDate ? await supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&area_level=eq.district&metric_date=eq.${dailyDate}&order=state.asc,district.asc,item_code.asc`) : [];
   const monthlyLatest = monthlyDate ? await supabaseGetAll(`monthly_item_area_summary?select=metric_month,area_level,state,district,item_code,min_price,median_price,max_price&metric_month=eq.${monthlyDate}&order=state.asc,item_code.asc`) : [];
   const monthlyHistoryStart = monthlyDate ? new Date(`${monthlyDate}T00:00:00Z`) : null;
