@@ -12,4 +12,17 @@ All metrics are calculated by code from validated observations. Definitions belo
 | Contribution | An item's change in weighted basket cost divided by total basket change, expressed in percentage points where defined. |
 | Anomaly | Observation outside configured historical bounds; the initial foundation uses a robust median/MAD z-score. |
 
+## Reference basket contract
+
+The Dashboard and stored AI evidence use the same reference-basket definition:
+
+- Window: seven inclusive calendar days ending on the latest available metric date. The interface reports both the calendar range and the number of observed days.
+- Component value: median of the daily item-area summary medians within that window, using the official item code and matched unit for each basket component.
+- Area eligibility: an area is included only when all ten reference-basket components are present in the window. Missing items never contribute zero.
+- Basket value: the unweighted sum of the ten component medians. Quantities are one official pack/unit each.
+- Cross-state reference: the median of complete state basket values, not the mean.
+- Monthly view: the same component and complete-area rules applied to the selected calendar month; it is not mixed with the daily window.
+
+AI text receives these structured values as input and may explain them, but it does not recalculate or override them.
+
 Metrics must show period, geography, filters, sample size, and missing-data caveats in the API response or dashboard.
