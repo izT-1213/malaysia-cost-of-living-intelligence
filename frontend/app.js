@@ -73,6 +73,7 @@ let dailyDateForPremise = "";
 let dailyStartDateForPremise = "";
 let aiInsightBundle = { general: "", states: {} };
 let aiInsightStatus = "not loaded";
+let aiLoadPromise = null;
 let monthlyFallback = false;
 let monthlyDisplayDate = "";
 
@@ -925,6 +926,8 @@ document.querySelectorAll(".nav-button").forEach((button) => {
       viewFilter.value = "custom";
       customBasketPanel.hidden = false;
     } else if (button.dataset.view === "ai-view") {
+      if (loadPromise) await loadPromise;
+      await loadAiInsight();
       renderInsightMap();
       if (supabaseLoaded && !premiseDataLoaded) {
         await loadPremiseData(basketComponents.flatMap((component) => component.itemCodes));
@@ -994,6 +997,57 @@ function toRows(rows, itemNames) {
   }));
 }
 
+async function loadAiInsight() {
+  if (aiLoadPromise) return aiLoadPromise;
+  if (!supabaseLoaded || !datasets.daily.length) {
+    aiInsightStatus = "not available";
+    document.querySelector("#ai-insight-copy").textContent = "AI insight requires live structured data first.";
+    document.querySelector("#ai-general-copy").textContent = "AI insight requires live structured data first.";
+    document.querySelector("#ai-general-meta").textContent = "Live metrics are not available yet.";
+    return;
+  }
+  document.querySelector("#ai-insight-copy").textContent = "Loading the latest stored insight…";
+  document.querySelector("#ai-general-copy").textContent = "Loading the latest stored insight…";
+  document.querySelector("#ai-general-meta").textContent = "AI insights load separately from the main dashboard data.";
+  aiLoadPromise = (async () => {
+    try {
+      const insights = await supabaseGet("ai_insights?select=generated_text,provider,insight_date,analytical_payload&insight_type=eq.daily_summary&order=insight_date.desc&limit=1");
+      const latestInsight = insights[0];
+      const payload = latestInsight?.analytical_payload || {};
+      const currentReference = structuredReferenceBasketValue(datasets.daily);
+      const storedReference = Number(payload.reference_basket?.basket_median_reference);
+      const matchesCurrentData = Boolean(
+        latestInsight
+        && dailyDateForPremise
+        && payload.latest_metric_date === dailyDateForPremise
+        && currentReference !== null
+        && Number.isFinite(storedReference)
+        && Math.abs(currentReference - storedReference) < 0.005
+      );
+      aiInsightStatus = matchesCurrentData ? "stored and current" : latestInsight ? "withheld as stale" : "not available";
+      aiInsightBundle = matchesCurrentData ? payload : { general: "", states: {} };
+      const generalInsight = matchesCurrentData
+        ? aiInsightBundle.general || latestInsight.generated_text || "No generated insight is available yet."
+        : "The stored explanation is not shown because it does not match the current metric window. Structured metrics remain available.";
+      document.querySelector("#ai-insight-copy").textContent = generalInsight;
+      document.querySelector("#ai-general-copy").textContent = generalInsight;
+      renderAiGeneralFacts();
+      document.querySelector("#ai-general-meta").textContent = latestInsight
+        ? `Stored ${latestInsight.insight_date} · ${latestInsight.provider || "rule-based"} explanation · ${aiInsightStatus} · metric date ${payload.latest_metric_date || "unknown"}`
+        : "No stored insight is available. Structured metrics remain available without AI.";
+    } catch (error) {
+      console.warn("AI insight is not available; structured metrics remain available.", error);
+      aiInsightStatus = "unavailable";
+      aiInsightBundle = { general: "", states: {} };
+      document.querySelector("#ai-insight-copy").textContent = "AI insight is unavailable; structured metrics remain available.";
+      document.querySelector("#ai-general-copy").textContent = "AI insight is unavailable; structured metrics remain available.";
+      document.querySelector("#ai-general-meta").textContent = "AI is unavailable; this page uses structured metrics only.";
+      renderAiGeneralFacts();
+    }
+  })().finally(() => { aiLoadPromise = null; });
+  return aiLoadPromise;
+}
+
 async function loadSupabaseData() {
   const banner = document.querySelector("#data-status-message");
   if (!config.url || !config.anonKey || config.anonKey.startsWith("sb_secret_")) {
@@ -1060,40 +1114,6 @@ async function loadSupabaseData() {
   const monthly = monthlyFallback
     ? historyMonthlyRows.filter((row) => row.metricDate === monthlyDisplayDate)
     : latestMonthlyRows;
-  try {
-    const insights = await supabaseGet("ai_insights?select=generated_text,provider,insight_date,analytical_payload&insight_type=eq.daily_summary&order=insight_date.desc&limit=1");
-    const latestInsight = insights[0];
-    const payload = latestInsight?.analytical_payload || {};
-    const currentReference = structuredReferenceBasketValue(toRows(daily, itemNames));
-    const storedReference = Number(payload.reference_basket?.basket_median_reference);
-    const matchesCurrentData = Boolean(
-      latestInsight
-      && dailyDate
-      && payload.latest_metric_date === dailyDate
-      && currentReference !== null
-      && Number.isFinite(storedReference)
-      && Math.abs(currentReference - storedReference) < 0.005
-    );
-    aiInsightStatus = matchesCurrentData ? "stored and current" : latestInsight ? "withheld as stale" : "not available";
-    aiInsightBundle = matchesCurrentData ? payload : { general: "", states: {} };
-    const generalInsight = matchesCurrentData
-      ? aiInsightBundle.general || latestInsight.generated_text || "No generated insight is available yet."
-      : "The stored explanation is not shown because it does not match the current metric window. Structured metrics remain available.";
-    document.querySelector("#ai-insight-copy").textContent = generalInsight;
-    document.querySelector("#ai-general-copy").textContent = generalInsight;
-    renderAiGeneralFacts();
-    document.querySelector("#ai-general-meta").textContent = latestInsight
-      ? `Stored ${latestInsight.insight_date} · ${latestInsight.provider || "rule-based"} explanation · ${aiInsightStatus} · metric date ${payload.latest_metric_date || "unknown"}`
-      : "No stored insight is available. Structured metrics remain available without AI.";
-  } catch (error) {
-    console.warn("AI insight is not available; structured metrics remain available.", error);
-    aiInsightStatus = "unavailable";
-    aiInsightBundle = { general: "", states: {} };
-    document.querySelector("#ai-insight-copy").textContent = "AI insight is unavailable; structured metrics remain available.";
-    document.querySelector("#ai-general-copy").textContent = "AI insight is unavailable; structured metrics remain available.";
-    document.querySelector("#ai-general-meta").textContent = "AI is unavailable; this page uses structured metrics only.";
-    renderAiGeneralFacts();
-  }
   if (!daily.length && !monthly.length) {
     setDataStatus("empty", `Live data is connected, but no observations are available yet.${lastSuccessfulCopy()}`);
     observations = [];
