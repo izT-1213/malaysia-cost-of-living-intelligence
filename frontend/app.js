@@ -28,7 +28,8 @@ let districts = {
 
 const trend = [11.7, 12.1, 12.0, 12.6, 12.3, 12.8, 12.4];
 const money = (value) => `RM ${value.toFixed(2)}`;
-const roundCurrency = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
+// Keep frontend totals aligned with Python's two-decimal metric rounding.
+const roundCurrency = (value) => Number(value.toFixed(2));
 const config = window.PRICE_LENS_CONFIG || {};
 
 // Components are resolved from approved category/name/unit rules. Similar
