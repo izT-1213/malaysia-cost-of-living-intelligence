@@ -20,6 +20,8 @@ The Dashboard and stored AI evidence use the same reference-basket definition:
 - Component value: median of the daily item-area summary medians within that window, using the official item code and matched unit for each basket component.
 - Area eligibility: an area is included only when all ten reference-basket components are present in the window. Missing items never contribute zero.
 - Grain distinction: state-level baskets may combine observations across premises, while premise-level baskets require all ten components at the same premise within the window.
+- Daily movement: a daily trend point is shown only when all ten components are present on that individual day; window-level coverage can therefore be 6/7 days while the trend has fewer points.
+- Confidence wording: fewer than seven observed days describes window-level coverage and does not imply a complete seven-point daily trend.
 - Basket value: the unweighted sum of the ten component medians. Quantities are one official pack/unit each.
 - Cross-state reference: the median of complete state basket values, not the mean.
 - Monthly view: the same component and complete-area rules applied to the selected calendar month; it is not mixed with the daily window.

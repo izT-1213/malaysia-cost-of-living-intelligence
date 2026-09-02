@@ -87,7 +87,7 @@ function coverageLabel(items, total, days) {
   if (!items || !total) return "Coverage unavailable";
   if (items < total) return "Partial basket";
   if (days < 3) return "Limited coverage";
-  if (days < 7) return "Good coverage · fewer than 7 days";
+  if (days < 7) return `Window-level coverage · ${days}/7 days`;
   return "Strong coverage";
 }
 
@@ -360,7 +360,7 @@ function renderStatePremiseAnalysis(state) {
     <div class="bar-row"><span class="bar-label">${row.premise || `Premise ${row.premiseCode}`}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i></div><strong>${money(row.median)}</strong></div>`).join("")}`;
   const trendRows = stateBasketTrendRows(state);
   const trendMax = trendRows.length ? Math.max(...trendRows.map((row) => row.median)) : 0;
-  trend.innerHTML = `<div class="subchart-heading"><p class="eyebrow">Seven-day movement</p><span>Complete basket median · RM</span></div>${trendRows.length ? `<div class="mini-trend">${trendRows.map((row) => `<div class="mini-trend-column"><strong>${money(row.median)}</strong><i style="height:${(row.median / trendMax) * 100}%"></i><small>${row.date.slice(5)}</small></div>`).join("")}</div>` : '<p class="chart-empty">Not enough complete daily baskets for a trend.</p>'}`;
+  trend.innerHTML = `<div class="subchart-heading"><p class="eyebrow">State basket movement</p><span>${trendRows.length}/7 complete days · RM</span></div>${trendRows.length ? `<div class="mini-trend">${trendRows.map((row) => `<div class="mini-trend-column"><strong>${money(row.median)}</strong><i style="height:${(row.median / trendMax) * 100}%"></i><small>${row.date.slice(5)}</small></div>`).join("")}</div>` : '<p class="chart-empty">No individual day has a complete 10-item state basket in this window.</p>'}`;
   tableBody.innerHTML = rows.slice(0, 10).map((row) => `<tr><th scope="row">${row.premise || `Premise ${row.premiseCode}`}</th><td>${row.district || "—"}</td><td>${money(row.median)}</td></tr>`).join("");
 }
 
