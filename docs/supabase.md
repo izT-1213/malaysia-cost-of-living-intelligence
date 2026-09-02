@@ -11,7 +11,7 @@ The serving retention policy is 30 days of compact daily area summaries, 7 days 
 3. Run `supabase/migrations/002_allow_unmatched_lookup_codes.sql` after it. This preserves transaction rows when the item lookup lags the current feed.
 4. Run `supabase/migrations/003_summary_tables.sql` and then `supabase/migrations/004_daily_item_premise_summary.sql`.
 5. Run `supabase/migrations/005_dashboard_date_indexes.sql`.
-6. Run `supabase/migrations/006_daily_basket_summary.sql` for the canonical dashboard/AI basket totals.
+6. Run `supabase/migrations/006_daily_basket_summary.sql` and `supabase/migrations/007_daily_basket_reference.sql` for the canonical dashboard/AI basket totals.
 7. Set `SUPABASE_URL` and `SUPABASE_KEY` in the local `.env` file.
 8. Keep the service key private. It is for the ingestion job only and must never be shipped to the web app.
 9. Leave `STORE_RAW_OBSERVATIONS=false` for the free-tier deployment. Set it to `true` only for an explicitly controlled local run where raw observations are required.

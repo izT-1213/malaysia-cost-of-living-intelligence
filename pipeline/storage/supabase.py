@@ -185,6 +185,7 @@ def load_daily_basket_summary(
     client: Client,
     metric_date: date,
     state_rows: list[dict[str, Any]],
+    cross_state_reference: float,
     source_sha256: str,
     batch_size: int = 500,
 ) -> int:
@@ -194,6 +195,7 @@ def load_daily_basket_summary(
             "metric_date": metric_date.isoformat(),
             "state": row["state"],
             "basket_median": float(row["basket_median"]),
+            "cross_state_reference": float(cross_state_reference),
             "component_prices": row.get("component_prices", {}),
             "reference_basket_items_observed": int(row.get("reference_basket_items_observed", 0)),
             "reference_basket_items_total": int(row.get("reference_basket_items_total", 0)),

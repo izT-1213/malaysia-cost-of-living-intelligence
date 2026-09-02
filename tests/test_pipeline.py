@@ -231,11 +231,13 @@ def test_canonical_basket_loader_uses_metric_date_and_state_conflict():
             "reference_basket_items_total": 10,
             "reference_basket_days_observed": 7,
         }],
+        89.03,
         "abc123",
         batch_size=10,
     ) == 1
     assert client.table_instance.conflict == "metric_date,state"
     assert client.table_instance.rows[0]["basket_median"] == 89.03
+    assert client.table_instance.rows[0]["cross_state_reference"] == 89.03
     assert client.table_instance.rows[0]["source_snapshot_sha256"] == "abc123"
 
 

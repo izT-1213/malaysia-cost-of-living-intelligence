@@ -208,6 +208,7 @@ def main() -> None:
             client,
             canonical_metric_date,
             insight_payload.get("states", []),
+            insight_payload["reference_basket"]["basket_median_reference"],
             source_hash,
             args.batch_size,
         )

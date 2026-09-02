@@ -201,7 +201,10 @@ function metricWindowLabel(period = document.querySelector("#period-filter")?.va
 
 function structuredReferenceBasketValue(rows) {
   if (canonicalDailyBasketRows.length) {
-    return roundCurrency(medianOf(canonicalDailyBasketRows.map((row) => Number(row.basket_median))));
+    const storedReference = Number(canonicalDailyBasketRows[0].cross_state_reference);
+    return Number.isFinite(storedReference)
+      ? storedReference
+      : roundCurrency(medianOf(canonicalDailyBasketRows.map((row) => Number(row.basket_median))));
   }
   const stateRows = rows.filter((row) => row.areaLevel === "state");
   const baskets = [...new Set(stateRows.map((row) => row.state))].map((state) => {
@@ -1027,7 +1030,7 @@ async function loadSupabaseData() {
   const daily = dailyPages.flat();
   try {
     canonicalDailyBasketRows = dailyDate
-      ? await supabaseGetAll(`daily_basket_summary?select=metric_date,state,basket_median,reference_basket_items_observed,reference_basket_items_total,reference_basket_days_observed&metric_date=eq.${dailyDate}&order=state.asc`)
+      ? await supabaseGetAll(`daily_basket_summary?select=metric_date,state,basket_median,cross_state_reference,reference_basket_items_observed,reference_basket_items_total,reference_basket_days_observed&metric_date=eq.${dailyDate}&order=state.asc`)
       : [];
   } catch (error) {
     console.warn("Canonical basket summary is unavailable; using detailed summaries.", error);
