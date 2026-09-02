@@ -338,7 +338,7 @@ function renderStatePremiseAnalysis(state) {
     return;
   }
   if (!rows.length) {
-    copy.textContent = `No premises in ${state} have every reference-basket component in the latest 7-day window.`;
+    copy.textContent = `No single premise in ${state} has all 10 reference-basket components in the latest 7-day window. The state-level basket may still be complete because it combines coverage across multiple premises.`;
     grid.innerHTML = "";
     chart.innerHTML = "";
     trend.innerHTML = "";
@@ -753,13 +753,15 @@ function render() {
   const rows = selectedRows();
   if (dataStatus === "loading") {
     table.innerHTML = '<tr><td colspan="5">Waiting for live data…</td></tr>';
-    document.querySelector("#median-value").textContent = "—";
-    document.querySelector("#min-value").textContent = "—";
-    document.querySelector("#max-value").textContent = "—";
-    document.querySelector("#areas-value").textContent = "—";
+    ["#median-value", "#min-value", "#max-value", "#areas-value"].forEach((selector) => {
+      const target = document.querySelector(selector);
+      target.innerHTML = '<span class="metric-loading" role="img" aria-label="Loading metric"></span>';
+    });
+    document.querySelectorAll(".metric-card").forEach((card) => card.setAttribute("aria-busy", "true"));
     document.querySelector(".signal-number").textContent = "—";
     return;
   }
+  document.querySelectorAll(".metric-card").forEach((card) => card.removeAttribute("aria-busy"));
   if (!rows.length) {
     const unavailable = dataStatus === "error";
     const monthlyView = document.querySelector("#period-filter").value === "monthly";
