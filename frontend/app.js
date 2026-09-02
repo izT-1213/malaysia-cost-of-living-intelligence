@@ -22,6 +22,7 @@ let districts = {
 
 const trend = [11.7, 12.1, 12.0, 12.6, 12.3, 12.8, 12.4];
 const money = (value) => `RM ${value.toFixed(2)}`;
+const roundCurrency = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 const config = window.PRICE_LENS_CONFIG || {};
 
 // Components are resolved from approved category/name/unit rules. Similar
@@ -185,7 +186,7 @@ function statePremiseBasketRows(state) {
     if (componentRows.some((row) => !row)) return null;
     return {
       ...area,
-      median: componentRows.reduce((sum, row) => sum + row.median, 0),
+      median: roundCurrency(componentRows.reduce((sum, row) => sum + row.median, 0)),
       componentCount: componentRows.length,
     };
   }).filter(Boolean).sort((a, b) => a.median - b.median || String(a.premise).localeCompare(String(b.premise)));
@@ -256,11 +257,11 @@ function stateBasketTrendRows(state) {
     const dayRows = rows.filter((row) => row.metricDate === metricDate);
     const componentRows = basketComponents.map((component) => {
       const matches = dayRows.filter((row) => component.itemCodes.includes(row.itemCode));
-      return matches.length ? medianOf(matches.map((row) => row.median)) : null;
+      return matches.length ? roundCurrency(medianOf(matches.map((row) => row.median))) : null;
     });
     return componentRows.some((value) => value === null) ? null : {
       date: metricDate,
-      median: componentRows.reduce((sum, value) => sum + value, 0),
+      median: roundCurrency(componentRows.reduce((sum, value) => sum + value, 0)),
     };
   }).filter(Boolean);
 }
@@ -412,7 +413,7 @@ function selectedCustomPremiseRows() {
   return [...grouped.values()].map((area) => {
     const components = customBasket.map((item) => latestComparableRows(area.components.get(String(item.itemCode)) || []));
     if (components.some((rows) => !rows.length)) return null;
-    const median = components.reduce((sum, rows, index) => sum + medianOf(rows.map((row) => row.median)) * customBasket[index].quantity, 0);
+    const median = roundCurrency(components.reduce((sum, rows, index) => sum + roundCurrency(medianOf(rows.map((row) => row.median))) * customBasket[index].quantity, 0));
     const premise = premiseLookup.find((row) => String(row.premise_code) === String(area.premiseCode));
     return { ...area, premise: premise?.premise || `Premise ${area.premiseCode}`, median };
   }).filter(Boolean).sort((a, b) => a.median - b.median);
@@ -511,7 +512,7 @@ function medianOf(values) {
 }
 
 function medianRow(rows) {
-  return ["median", "min", "max"].reduce((result, field) => ({ ...result, [field]: medianOf(rows.map((row) => row[field])) }), {});
+  return ["median", "min", "max"].reduce((result, field) => ({ ...result, [field]: roundCurrency(medianOf(rows.map((row) => row[field]))) }), {});
 }
 
 function resolveBasketComponents(items) {
