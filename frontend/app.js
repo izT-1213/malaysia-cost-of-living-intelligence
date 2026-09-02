@@ -203,9 +203,11 @@ function structuredReferenceBasketValue(rows) {
     const windowRows = latestWindowRows(stateRows.filter((row) => row.state === state));
     const components = basketComponents.map((component) => {
       const matches = component.itemCodes.flatMap((code) => windowRows.filter((row) => String(row.itemCode) === String(code)));
-      return matches.length ? medianOf(matches.map((row) => row.median)) : null;
+      return matches.length ? roundCurrency(medianOf(matches.map((row) => row.median))) : null;
     });
-    return components.every((value) => value !== null) ? components.reduce((sum, value) => sum + value, 0) : null;
+    return components.every((value) => value !== null)
+      ? roundCurrency(components.reduce((sum, value) => sum + value, 0))
+      : null;
   }).filter((value) => value !== null);
   return baskets.length ? medianOf(baskets) : null;
 }
