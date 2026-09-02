@@ -18,6 +18,7 @@ from pipeline.ingestion.pricecatcher import (
 from pipeline.insights import build_daily_insight_payload, generate_insight_bundle
 from pipeline.storage.supabase import (
     delete_observations_before,
+    delete_daily_basket_summaries_before,
     delete_monthly_summaries_before,
     delete_premise_summaries_before,
     get_client,
@@ -25,6 +26,7 @@ from pipeline.storage.supabase import (
     load_lookup,
     load_observations,
     load_ai_insight,
+    load_daily_basket_summary,
     load_item_premise_summary,
     load_source_snapshot,
 )
@@ -141,6 +143,7 @@ def main() -> None:
         delete_monthly_summaries_before(
             client, months_before(as_of, MONTHLY_SUMMARY_RETENTION_MONTHS - 1)
         )
+        delete_daily_basket_summaries_before(client, as_of - timedelta(days=args.days - 1))
         item_count = load_lookup(client, pl.read_parquet(item_result.destination), "item_lookup", args.batch_size)
         premise_count = load_lookup(
             client, pl.read_parquet(premise_result.destination), "premise_lookup", args.batch_size
@@ -200,6 +203,14 @@ def main() -> None:
         premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
         item_lookup_frame = pl.read_parquet(item_result.destination)
         insight_payload = build_daily_insight_payload(daily, as_of, item_lookup_frame)
+        canonical_metric_date = date.fromisoformat(insight_payload["latest_metric_date"])
+        canonical_basket_count = load_daily_basket_summary(
+            client,
+            canonical_metric_date,
+            insight_payload.get("states", []),
+            source_hash,
+            args.batch_size,
+        )
         insight_bundle, insight_provider, insight_model, insight_failure_reason = generate_insight_bundle(insight_payload)
         insight_payload_with_status = {
             **insight_payload,
@@ -216,6 +227,7 @@ def main() -> None:
             f"Daily summary load complete: {item_count:,} items, {premise_count:,} premises, "
             f"{daily_count:,} daily, {monthly_count:,} monthly area summaries and "
             f"{premise_summary_count:,} premise summaries across {args.days} days; "
+            f"{canonical_basket_count:,} canonical basket rows; "
             f"insight provider: {insight_provider}"
         )
     elif args.command == "backfill-month":
