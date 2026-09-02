@@ -5,7 +5,7 @@ import pytest
 import httpx
 
 from pipeline.ingestion.pricecatcher import download_latest_available_snapshot, monthly_url
-from pipeline.insights import _is_daily_quota_error, _parse_gemini_bundle
+from pipeline.insights import _is_daily_quota_error, _parse_gemini_bundle, build_daily_insight_payload
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
 from pipeline.quality.pricecatcher import validate_observations
 from pipeline.storage.supabase import load_item_area_summary
@@ -235,3 +235,41 @@ def test_recent_window_includes_exact_calendar_days():
 def test_month_and_source_hash_helpers_are_deterministic():
     assert previous_month(date(2026, 1, 15)) == date(2025, 12, 1)
     assert combined_source_hash(["b", "a"]) == combined_source_hash(["a", "b"])
+
+
+def test_daily_insight_basket_uses_shared_window_and_median_reference():
+    item_lookup = pl.DataFrame({
+        "item_code": list(range(1, 11)),
+        "item": [
+            "BERAS PREMIUM", "AYAM BERSIH", "TELUR AYAM GRED A", "MINYAK MASAK",
+            "TEPUNG GANDUM", "BAWANG BESAR", "KENTANG", "KUBIS BULAT",
+            "TOMATO", "KANGKUNG",
+        ],
+        "unit": ["10 kg", "1kg", "30 biji", "1kg", "1kg", "1kg", "1kg", "1kg", "1kg", "1kg"],
+        "item_category": [
+            "BERAS", "AYAM", "TELUR", "MINYAK DAN LEMAK", "TEPUNG", "BAWANG",
+            "UBI KENTANG", "SAYUR-SAYURAN", "SAYUR-SAYURAN", "SAYUR-SAYURAN",
+        ],
+    })
+    rows = []
+    state_values = {"Johor": 1.0, "Kedah": 2.0, "Perak": 5.0}
+    for day in range(1, 9):
+        for state, value in state_values.items():
+            for item_code in range(1, 11):
+                rows.append({
+                    "metric_date": date(2026, 8, day),
+                    "area_level": "state",
+                    "state": state,
+                    "district": "",
+                    "item_code": item_code,
+                    "median_price": value if day > 1 else value + 100,
+                })
+    summary = pl.DataFrame(rows)
+
+    payload = build_daily_insight_payload(summary, date(2026, 8, 8), item_lookup)
+
+    assert payload["reference_basket"]["period"] == "7 calendar days ending 2026-08-08 (7 observed days)"
+    assert payload["reference_basket"]["complete_states"] == 3
+    assert payload["reference_basket"]["basket_median_reference"] == 20.0
+    assert payload["reference_basket"]["lowest"]["state"] == "Johor"
+    assert payload["reference_basket"]["highest"]["state"] == "Perak"

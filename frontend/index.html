@@ -38,14 +38,14 @@
           <div>
             <p class="eyebrow">A clearer view of everyday prices</p>
             <h1>What does a basket cost<br /><em>near you?</em></h1>
-            <p class="hero-copy">
-              Explore deterministic summaries from Malaysia’s PriceCatcher observations across states, districts, and items.
+            <p class="hero-copy" id="hero-copy">
+              See what a 10-item grocery basket costs across Malaysia, using complete PriceCatcher observations.
             </p>
           </div>
           <div class="hero-note">
             <span class="note-label">Current view</span>
-            <strong>Latest available prices</strong>
-            <span>26 August 2026</span>
+            <strong id="current-view-label">Latest available prices</strong>
+            <span id="current-date-range">Waiting for live data</span>
           </div>
         </section>
 
@@ -73,20 +73,21 @@
         </section>
 
         <section class="basket-overview" aria-label="Reference basket contents">
-          <div><p class="eyebrow">Reference basket</p><h2>What is included?</h2></div>
+          <div><p class="eyebrow">Reference basket</p><h2>10 everyday grocery items</h2></div>
           <div class="basket-chip-list" id="reference-basket-list"></div>
         </section>
 
-        <div class="demo-banner" role="status">
+        <div class="demo-banner" id="data-status" data-status="loading" role="status" aria-live="polite" aria-busy="true">
           <span class="demo-icon" aria-hidden="true">i</span>
-          <span>Loading live data from Supabase…</span>
+          <span id="data-status-message">Loading live data from Supabase…</span>
+          <button class="text-button" id="retry-data" type="button" hidden>Retry</button>
         </div>
 
         <section class="metric-grid" aria-label="Key metrics">
           <article class="metric-card metric-card-dark">
-              <span class="metric-label" id="median-label">Reference basket cost</span>
+              <span class="metric-label" id="median-label">Your 10-item basket costs</span>
             <strong id="median-value">RM 12.40</strong>
-            <span class="metric-caption" id="median-caption">Across selected observations</span>
+            <span class="metric-caption" id="median-caption">Across complete areas</span>
           </article>
           <article class="metric-card">
               <span class="metric-label" id="min-label">Cheapest complete basket</span>
@@ -101,7 +102,7 @@
           <article class="metric-card metric-card-accent">
             <span class="metric-label">Areas compared</span>
             <strong id="areas-value">8</strong>
-            <span class="metric-caption">States and districts</span>
+            <span class="metric-caption" id="areas-caption">Complete states compared</span>
           </article>
         </section>
 
@@ -114,7 +115,7 @@
               </div>
               <span class="trend-badge">No partial baskets</span>
             </div>
-            <div class="method-note"><strong>Every area must contain every basket component.</strong><p>We calculate each component's median price, multiply by its selected quantity, and add the components together. Missing items are never treated as zero.</p><div class="method-pills"><span>Exact item codes</span><span>Matched units</span><span>Deterministic totals</span></div></div>
+            <div class="method-note"><strong id="method-heading">Every area must contain all 10 basket items.</strong><p id="method-copy">Prices are median observed prices, not guaranteed store prices. Missing items are never treated as zero.</p><div class="method-pills"><span>Exact item codes</span><span>Matched units</span><span>Deterministic totals</span></div></div>
           </article>
 
           <article class="panel insight-panel">
@@ -209,6 +210,7 @@
             </div>
             <div class="basket-builder-controls">
               <label><span>Category</span><select id="custom-category"><option value="all">All categories</option></select></label>
+              <label><span>Search item</span><input id="custom-item-search" type="search" placeholder="Search official item name" autocomplete="off" /></label>
               <label><span>Item</span><select id="custom-item"><option value="">Choose an item</option></select></label>
               <label class="quantity-field"><span>Quantity</span><input id="custom-quantity" type="number" min="0.01" step="0.01" value="1" /></label>
               <button class="text-button" id="add-basket-item" type="button">Add item</button>
@@ -237,11 +239,32 @@
             <div class="pipeline-node node-store"><span class="node-index">04</span><strong>Compact serving layer</strong><small>Daily detail window<br />Monthly summaries</small></div>
             <div class="pipeline-line line-one"></div><div class="pipeline-line line-two"></div><div class="pipeline-line line-three"></div>
           </div>
+          <section class="methodology-panel" aria-label="Methodology and data quality">
+            <div class="panel-heading"><div><p class="eyebrow">Methodology</p><h2>How PriceLens stays reproducible</h2></div></div>
+            <div class="methodology-grid">
+              <article class="about-card"><p class="eyebrow">Source and mapping</p><h2>Official catalogue</h2><p>PriceCatcher monthly Parquet snapshots are preserved as raw inputs. Official item and premise lookup tables map stable item codes, units, premises, states, and districts before metrics are calculated.</p></article>
+              <article class="about-card"><p class="eyebrow">Calculation rules</p><h2>Complete observations</h2><p>Item prices use observed medians with deterministic minimum and maximum values. A basket is the unweighted sum of its component medians, and areas missing any component are excluded rather than treated as zero.</p></article>
+              <article class="about-card"><p class="eyebrow">Time and storage</p><h2>Compact rolling summaries</h2><p>Raw source Parquet files are preserved before transformation. The free-tier Supabase serving layer stores compact daily area summaries for the latest 30 days, seven days of premise summaries for basket comparisons, and six months of monthly summaries. The dashboard currently uses the latest seven daily days.</p></article>
+              <article class="about-card"><p class="eyebrow">Data quality</p><h2>Coverage, not confidence</h2><p>Coverage quality is described using observed days, complete items, premises, and missingness. These are operational indicators, not statistical confidence intervals.</p><div class="quality-list" id="about-quality-list"><span>Waiting for live quality indicators.</span></div></article>
+              <article class="about-card"><p class="eyebrow">Pipeline behavior</p><h2>Incremental and idempotent</h2><p>Source snapshots are hashed for provenance. Summary loads use stable composite keys and upserts, allowing a rerun to reproduce the same serving tables without duplicate metric rows.</p></article>
+              <article class="about-card"><p class="eyebrow">AI boundary</p><h2>Explain, don’t calculate</h2><p>AI receives structured, validated summaries only. It may explain current metrics, but code calculates every price statistic and stale or contradictory explanations are withheld.</p></article>
+            </div>
+            <p class="methodology-footnote" id="about-freshness">Known limitations: coverage varies by place and day; prices are observed medians, not guaranteed store prices or a replacement for CPI.</p>
+          </section>
           <div class="about-grid">
             <article class="about-card"><p class="eyebrow">Data source</p><h2>PriceCatcher</h2><p>Prices are collected and verified daily by groundstaff under Malaysia’s Ministry of Domestic Trade. Codes are mapped through official lookup tables.</p><a href="https://data.gov.my/data-catalogue/pricecatcher" target="_blank" rel="noreferrer">View official catalogue ↗</a></article>
-            <article class="about-card"><p class="eyebrow">Storage design</p><h2>Built for free tiers</h2><p>Raw detail is kept only for the latest 30 days. Older months become compact summaries so the project stays within free database limits.</p><span class="about-chip">Incremental · idempotent · reproducible</span></article>
+            <article class="about-card"><p class="eyebrow">Storage design</p><h2>Built for free tiers</h2><p>Raw source files are preserved before transformation. Supabase stores compact daily summaries for 30 days, premise summaries for 7 days, and monthly summaries for 6 months.</p><span class="about-chip">Incremental · idempotent · reproducible</span></article>
             <article class="about-card"><p class="eyebrow">AI boundary</p><h2>Explain, don’t calculate</h2><p>All price statistics are calculated by code. AI may explain validated movements, but it will not calculate the underlying metrics.</p><span class="about-chip">Deterministic by design</span></article>
           </div>
+          <section class="portfolio-panel" aria-label="Project profile">
+            <div class="portfolio-heading"><div><p class="eyebrow">Project profile</p><h2>Malaysia Cost of Living Intelligence</h2><p>PriceLens turns government PriceCatcher observations into clear, reproducible grocery-price metrics for Malaysian shoppers.</p></div><span class="portfolio-name">Nurul Izzati Suhardi</span></div>
+            <div class="portfolio-grid">
+              <div><span class="metric-label">Technology</span><p>Python · Polars · PostgreSQL/Supabase · Parquet · JavaScript · GitHub Actions</p></div>
+              <div><span class="metric-label">Key decisions</span><p>Official item mappings, complete-basket filtering, compact rolling summaries, deterministic calculations, and an AI explanation boundary.</p></div>
+              <div><span class="metric-label">Demonstrated skills</span><p>Analytics engineering · data quality · metric design · reproducible pipelines · API-backed frontend development · data storytelling</p></div>
+            </div>
+            <a class="portfolio-link" href="https://github.com/izT-1213/malaysia-cost-of-living-intelligence" target="_blank" rel="noreferrer">View repository on GitHub ↗</a>
+          </section>
         </section>
 
         <footer class="footer">
