@@ -274,6 +274,11 @@ def test_recent_window_includes_exact_calendar_days():
     ]
 
 
+def test_cleanup_retention_cutoff_is_inclusive():
+    as_of = date(2026, 9, 2)
+    assert as_of - __import__("datetime").timedelta(days=14 - 1) == date(2026, 8, 20)
+
+
 def test_month_and_source_hash_helpers_are_deterministic():
     assert previous_month(date(2026, 1, 15)) == date(2025, 12, 1)
     assert combined_source_hash(["b", "a"]) == combined_source_hash(["a", "b"])

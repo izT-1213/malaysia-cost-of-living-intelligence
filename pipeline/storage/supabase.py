@@ -106,6 +106,14 @@ def delete_daily_basket_summaries_before(client: Client, cutoff: date) -> None:
     client.table("daily_basket_summary").delete().lt("metric_date", cutoff.isoformat()).execute()
 
 
+def cleanup_daily_tables_before(client: Client, cutoff: date) -> None:
+    """Keep daily area, premise, basket, and optional raw rows within one retention window."""
+    client.table("daily_item_area_summary").delete().lt("metric_date", cutoff.isoformat()).execute()
+    delete_premise_summaries_before(client, cutoff)
+    delete_daily_basket_summaries_before(client, cutoff)
+    delete_observations_before(client, cutoff)
+
+
 def load_item_area_summary(
     client: Client,
     frame: pl.DataFrame,

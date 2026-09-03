@@ -23,6 +23,7 @@ from pipeline.insights import (
 )
 from pipeline.storage.supabase import (
     delete_daily_basket_summaries_before,
+    cleanup_daily_tables_before,
     delete_monthly_summaries_before,
     delete_observations_before,
     delete_premise_summaries_before,
@@ -71,13 +72,18 @@ def main() -> None:
     daily_parser.add_argument("--raw-dir", default="data/raw/pricecatcher")
     daily_parser.add_argument("--batch-size", type=int, default=500)
     daily_summary_parser = subparsers.add_parser(
-        "daily-summary", help="Summarize the latest 30 days and load them into Supabase"
+        "daily-summary", help="Summarize the latest 14 days and load them into Supabase"
     )
     daily_summary_parser.add_argument("--raw-dir", default="data/raw/pricecatcher")
-    daily_summary_parser.add_argument("--days", type=int, default=30)
+    daily_summary_parser.add_argument("--days", type=int, default=14)
     daily_summary_parser.add_argument("--as-of", help="Processing date in YYYY-MM-DD; defaults to today")
     daily_summary_parser.add_argument("--limit", type=int, help="Optional row limit for a small connectivity test")
     daily_summary_parser.add_argument("--batch-size", type=int, default=2000)
+    cleanup_parser = subparsers.add_parser(
+        "cleanup", help="Remove daily and premise data older than the retention window"
+    )
+    cleanup_parser.add_argument("--days", type=int, default=14, help="Maximum daily retention in calendar days")
+    cleanup_parser.add_argument("--as-of", help="Retention reference date in YYYY-MM-DD; defaults to today")
     backfill_parser = subparsers.add_parser(
         "backfill-month", help="Summarize one complete month and load it into Supabase"
     )
@@ -148,7 +154,7 @@ def main() -> None:
         delete_monthly_summaries_before(
             client, months_before(as_of, MONTHLY_SUMMARY_RETENTION_MONTHS - 1)
         )
-        delete_daily_basket_summaries_before(client, as_of - timedelta(days=args.days - 1))
+        cleanup_daily_tables_before(client, as_of - timedelta(days=args.days - 1))
         item_count = load_lookup(client, pl.read_parquet(item_result.destination), "item_lookup", args.batch_size)
         premise_count = load_lookup(
             client, pl.read_parquet(premise_result.destination), "premise_lookup", args.batch_size
@@ -254,6 +260,14 @@ def main() -> None:
             f"{canonical_basket_count:,} canonical basket rows; "
             f"insight provider: {insight_provider}"
         )
+    elif args.command == "cleanup":
+        if args.days < 1:
+            parser.error("cleanup --days must be at least 1")
+        as_of = date.fromisoformat(args.as_of) if args.as_of else date.today()
+        client = get_client()
+        cutoff = as_of - timedelta(days=args.days - 1)
+        cleanup_daily_tables_before(client, cutoff)
+        print(f"Cleanup complete: retained daily data from {cutoff.isoformat()} through {as_of.isoformat()}")
     elif args.command == "backfill-month":
         raw_dir = Path(args.raw_dir)
         source_month = date.fromisoformat(f"{args.month}-01")

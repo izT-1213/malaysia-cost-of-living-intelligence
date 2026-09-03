@@ -16,7 +16,7 @@ python -m pipeline.cli --help
 python -m pipeline.cli download
 # Run the end-to-end local load after setting SUPABASE_URL and SUPABASE_KEY
 python -m pipeline.cli daily
-# Load only the latest 30 days as compact summaries
+# Load only the latest 14 days as compact summaries
 python -m pipeline.cli daily-summary
 # Test the rolling path with a small sample
 python -m pipeline.cli daily-summary --limit 1000
@@ -27,8 +27,9 @@ python -m pipeline.cli backfill-month --month 2026-07
 For multiple months, use the manual `PriceCatcher historical monthly backfill`
 GitHub Actions workflow and provide the first and last month in `YYYY-MM` form.
 It loads compact monthly summaries only; it does not store raw observations or
-premise-level detail. Supabase retains only the current calendar month and the
-five preceding months of monthly summaries. Older annual comparisons should be
+premise-level detail. Supabase retains daily and premise detail for up to 14
+calendar days, plus the current calendar month and the five preceding months of
+monthly summaries. Older annual comparisons should be
 stored as separate compact yearly aggregates.
 
 ## Daily update automation

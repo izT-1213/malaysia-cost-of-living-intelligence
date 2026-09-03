@@ -33,10 +33,10 @@ in the serving database.
 
 ## Rolling recent window
 
-The daily job keeps the latest 30 calendar days available for recent analysis.
+The daily job keeps the latest 14 calendar days available for recent analysis.
 Because the window can cross a month boundary, the job downloads both the
 current and previous monthly Parquet files, then filters the combined data to
-the 30-day window.
+the 14-day window.
 
 Each run replaces summaries for the affected dates. This handles new records
 and corrections to recently published dates while remaining idempotent.
@@ -47,7 +47,7 @@ recent summaries, not the full rolling raw dataset.
 ## Month transition
 
 When a new month becomes available, the job continues to calculate the recent
-30-day window from two source files. The previous five months’ compact
+14-day window from two source files. The previous five months’ compact
 summaries are retained, and the new month’s summaries are added or updated.
 
 The source is surveillance data: missing item/premise/date combinations are

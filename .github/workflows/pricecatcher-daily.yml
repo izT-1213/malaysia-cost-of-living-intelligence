@@ -35,3 +35,6 @@ jobs:
 
       - name: Load recent PriceCatcher summaries
         run: python -m pipeline.cli daily-summary --batch-size 2000
+
+      - name: Enforce daily retention
+        run: python -m pipeline.cli cleanup --days 14
