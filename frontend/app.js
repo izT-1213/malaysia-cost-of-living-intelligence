@@ -48,6 +48,22 @@ const basketRules = [
 ];
 let basketComponents = [];
 
+const basketPresets = {
+  reference: basketRules.map((rule) => ({ category: rule.category, label: rule.label, unit: rule.unit, quantity: 1 })),
+  budget: [
+    ["BERAS", "Rice"], ["AYAM", "Standard chicken"], ["TELUR", "Chicken eggs"],
+    ["BAWANG", "Yellow onions"], ["UBI KENTANG", "Potatoes"],
+  ].map(([category, label]) => ({ category, label, unit: basketRules.find((rule) => rule.category === category)?.unit || "", quantity: 1 })),
+  produce: [
+    ["BAWANG", "Yellow onions"], ["UBI KENTANG", "Potatoes"], ["SAYUR-SAYURAN", "Cabbage"],
+    ["SAYUR-SAYURAN", "Tomato"], ["SAYUR-SAYURAN", "Kangkung"],
+  ].map(([category, label]) => ({ category, label, unit: basketRules.find((rule) => rule.label === label)?.unit || "", quantity: 1 })),
+  cooking: [
+    ["BERAS", "Rice"], ["MINYAK DAN LEMAK", "Cooking oil"], ["TEPUNG", "Wheat flour"],
+    ["BAWANG", "Yellow onions"], ["UBI KENTANG", "Potatoes"],
+  ].map(([category, label]) => ({ category, label, unit: basketRules.find((rule) => rule.label === label)?.unit || "", quantity: 1 })),
+};
+
 const stateFilter = document.querySelector("#state-filter");
 const districtFilter = document.querySelector("#district-filter");
 const itemFilter = document.querySelector("#item-filter");
@@ -56,9 +72,11 @@ const table = document.querySelector("#state-table");
 itemFilter.disabled = true;
 const customBasketPanel = document.querySelector("#custom-basket");
 const customCategory = document.querySelector("#custom-category");
+const customUnit = document.querySelector("#custom-unit");
 const customItemSearch = document.querySelector("#custom-item-search");
 const customItem = document.querySelector("#custom-item");
 const customQuantity = document.querySelector("#custom-quantity");
+const basketPreset = document.querySelector("#basket-preset");
 const customBasketList = document.querySelector("#custom-basket-list");
 const customStateFilter = document.querySelector("#custom-state-filter");
 const customDistrictFilter = document.querySelector("#custom-district-filter");
@@ -401,7 +419,7 @@ function renderInsightMap() {
 
 function renderCustomBuilder() {
   customBasketList.innerHTML = customBasket.length
-    ? `<div class="custom-basket-table-wrap"><table class="custom-basket-table"><thead><tr><th>Item</th><th>Unit</th><th>Quantity</th><th>Official code</th><th></th></tr></thead><tbody>${customBasket.map((entry, index) => `<tr><th scope="row">${entry.item}</th><td>${entry.unit}</td><td>${entry.quantity}</td><td>${entry.itemCode}</td><td><button type="button" data-remove-basket-index="${index}" aria-label="Remove ${entry.item}">Remove</button></td></tr>`).join("")}</tbody></table></div>`
+    ? `<div class="custom-basket-table-wrap"><table class="custom-basket-table"><thead><tr><th>Category</th><th>Item selection</th><th>Unit</th><th>Quantity</th><th></th></tr></thead><tbody>${customBasket.map((entry, index) => `<tr><th scope="row">${entry.label || entry.item}</th><td>${entry.itemCode ? entry.item : "Any brand"}</td><td>${entry.unit}</td><td>${entry.quantity}</td><td><button type="button" data-remove-basket-index="${index}" aria-label="Remove ${entry.label || entry.item}">Remove</button></td></tr>`).join("")}</tbody></table></div>`
     : "<span>No items added yet.</span>";
   customBasketList.querySelectorAll("[data-remove-basket-index]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -415,14 +433,33 @@ function renderCustomBuilder() {
 function populateCustomItemOptions() {
   const category = customCategory.value;
   const query = customItemSearch.value.trim().toLowerCase();
-  const filtered = availableCustomItems().filter((item) =>
-    (category === "all" || item.item_category === category)
-    && (!query || item.item.toLowerCase().includes(query))
-  );
-  customItem.replaceChildren(new Option("Choose an item", ""));
+  const categoryItems = availableCustomItems().filter((item) => category !== "all" && item.item_category === category);
+  const units = [...new Set(categoryItems.map((item) => item.unit).filter(Boolean))].sort();
+  const selectedUnit = units.includes(customUnit.value) ? customUnit.value : units[0] || "";
+  customUnit.replaceChildren(new Option(category === "all" ? "Choose a category first" : "Any brand in this unit", ""));
+  units.forEach((unit) => customUnit.add(new Option(unit, unit)));
+  customUnit.value = selectedUnit;
+  const filtered = categoryItems.filter((item) => item.unit === selectedUnit && (!query || item.item.toLowerCase().includes(query)));
+  customItem.replaceChildren(new Option(category === "all" ? "Choose a category first" : "Any brand", "__any__"));
   filtered.sort((a, b) => a.item.localeCompare(b.item)).forEach((item) => {
     customItem.add(new Option(`${item.item} · ${item.unit}`, String(item.item_code)));
   });
+}
+
+function eligibleItemsForEntry(entry) {
+  const rule = basketRules.find((candidate) => candidate.label === entry.label);
+  return availableItems.filter((item) => item.item_category === entry.category
+    && item.unit.trim().toLowerCase() === entry.unit.toLowerCase()
+    && (!rule || rule.name(item.item.toUpperCase())));
+}
+
+function presetBasket(value) {
+  if (value === "custom") return [];
+  return (basketPresets[value] || []).map((entry) => ({
+    ...entry,
+    item: `Any ${entry.label.toLowerCase()}`,
+    itemCode: null,
+  }));
 }
 
 function missingCustomItems() {
@@ -431,8 +468,10 @@ function missingCustomItems() {
     (customStateFilter.value === "all" || row.state === customStateFilter.value)
     && (customDistrictFilter.value === "all" || row.district === customDistrictFilter.value)
   );
-  const observedCodes = new Set(selectedRows.map((row) => String(row.itemCode)));
-  return customBasket.filter((item) => !observedCodes.has(String(item.itemCode)));
+  return customBasket.filter((item) => {
+    const eligibleCodes = new Set(eligibleItemsForEntry(item).map((candidate) => String(candidate.item_code)));
+    return !selectedRows.some((row) => eligibleCodes.has(String(row.itemCode)));
+  });
 }
 
 function availableCustomItems() {
@@ -572,12 +611,26 @@ function selectedCustomPremiseRows() {
       rows.push(row);
       rowsByItem.set(String(row.itemCode), rows);
     });
-    const components = customBasket.map((item) => rowsByItem.get(String(item.itemCode)) || []);
-    if (components.some((rows) => !rows.length)) return null;
-    const median = roundCurrency(components.reduce((sum, rows, index) => sum + roundCurrency(medianOf(rows.map((row) => row.median))) * customBasket[index].quantity, 0));
+    const components = customBasket.map((item) => {
+      if (item.itemCode) return { entry: item, rows: rowsByItem.get(String(item.itemCode)) || [], selected: item.item };
+      const eligibleCodes = new Set(eligibleItemsForEntry(item).map((candidate) => String(candidate.item_code)));
+      const candidates = windowedRows.filter((row) => eligibleCodes.has(String(row.itemCode)));
+      const byItem = new Map();
+      candidates.forEach((row) => {
+        const rows = byItem.get(String(row.itemCode)) || [];
+        rows.push(row);
+        byItem.set(String(row.itemCode), rows);
+      });
+      const best = [...byItem.entries()]
+        .map(([code, rows]) => ({ code, rows, median: medianOf(rows.map((row) => row.median)) }))
+        .sort((a, b) => a.median - b.median || a.code.localeCompare(b.code))[0];
+      return { entry: item, rows: best?.rows || [], selected: availableItems.find((candidate) => String(candidate.item_code) === best?.code)?.item || "Any brand" };
+    });
+    if (components.some((component) => !component.rows.length)) return null;
+    const median = roundCurrency(components.reduce((sum, component) => sum + roundCurrency(medianOf(component.rows.map((row) => row.median))) * component.entry.quantity, 0));
     const premise = premiseLookup.find((row) => String(row.premise_code) === String(area.premiseCode));
-    return { ...area, premise: premise?.premise || `Premise ${area.premiseCode}`, median };
-  }).filter(Boolean).sort((a, b) => a.median - b.median);
+    return { ...area, premise: premise?.premise || `Premise ${area.premiseCode}`, median, itemsUsed: components.map((component) => component.selected).join("; ") };
+  }).filter(Boolean).sort((a, b) => a.median - b.median || String(a.premise).localeCompare(String(b.premise))).slice(0, 10);
 }
 
 function latestComparableRows(rows) {
@@ -840,7 +893,7 @@ function renderCustomResults(rows) {
     ["Most expensive basket", expensive.median, expensive.district || expensive.state],
     ["Basket spread", expensive.median - cheapest.median, "Cheapest to most expensive"],
   ].map(([label, value, caption]) => `<article class="metric-card"><span class="metric-label">${label}</span><strong>${money(value)}</strong><span class="metric-caption">${caption}</span></article>`).join("");
-  target.querySelector("#custom-result-table").innerHTML = rows.map((row) => `<tr><th>${row.premise}</th><td>${row.district || row.state}</td><td>${money(row.median)}</td></tr>`).join("");
+  target.querySelector("#custom-result-table").innerHTML = rows.map((row) => `<tr><th>${row.premise}</th><td>${row.district || row.state}</td><td>${money(row.median)}</td><td>${row.itemsUsed || "—"}</td></tr>`).join("");
 }
 
 populateFilters();
@@ -871,14 +924,27 @@ viewFilter.addEventListener("change", () => {
   render();
 });
 customCategory.addEventListener("change", populateCustomItemOptions);
+customUnit.addEventListener("change", populateCustomItemOptions);
 customItemSearch.addEventListener("input", populateCustomItemOptions);
+basketPreset.addEventListener("change", () => {
+  customBasket = presetBasket(basketPreset.value);
+  renderCustomBuilder();
+  render();
+});
 document.querySelector("#add-basket-item").addEventListener("click", () => {
+  if (customCategory.value === "all") return;
   const item = availableItems.find((entry) => String(entry.item_code) === customItem.value);
   const quantity = Number(customQuantity.value);
-  if (!item || !Number.isFinite(quantity) || quantity <= 0) return;
-  const existing = customBasket.find((entry) => entry.itemCode === item.item_code);
+  const matchingRule = item && basketRules.find((rule) => rule.category === customCategory.value
+    && rule.unit.toLowerCase() === item.unit.trim().toLowerCase() && rule.name(item.item.toUpperCase()));
+  const label = item ? matchingRule?.label || customCategory.value : customCategory.value;
+  const unit = customUnit.value || item?.unit || "";
+  if ((customItem.value !== "__any__" && !item) || !Number.isFinite(quantity) || quantity <= 0) return;
+  const existing = customBasket.find((entry) => entry.category === customCategory.value && entry.itemCode === (item?.item_code || null));
+  const entry = { category: customCategory.value, label, unit, item: item?.item || `Any ${label.toLowerCase()}`, itemCode: item?.item_code || null, quantity };
   if (existing) existing.quantity += quantity;
-  else customBasket.push({ itemCode: item.item_code, item: item.item, unit: item.unit, quantity });
+  else customBasket.push(entry);
+  basketPreset.value = "custom";
   renderCustomBuilder();
   render();
 });
@@ -890,7 +956,10 @@ document.querySelector("#generate-custom-basket").addEventListener("click", asyn
   if (supabaseLoaded && !premiseDataLoaded) {
     renderCustomResults([]);
     document.querySelector("#custom-results .custom-basket-copy").textContent = "Loading the selected items across available premises…";
-    await loadPremiseData(customBasket.map((item) => item.itemCode));
+    const requestedCodes = customBasket.flatMap((item) => item.itemCode
+      ? [item.itemCode]
+      : eligibleItemsForEntry(item).map((candidate) => candidate.item_code));
+    await loadPremiseData(requestedCodes);
     populateCustomLocationFilters();
   }
   viewFilter.value = "custom";
@@ -907,6 +976,7 @@ document.querySelector("#reset-filters").addEventListener("click", () => {
   customDistrictFilter.value = "all";
   itemFilter.disabled = true;
   customBasket = [];
+  basketPreset.value = "custom";
   customBasketPanel.hidden = true;
   document.querySelector("#custom-results").hidden = true;
   renderCustomBuilder();
@@ -1173,19 +1243,21 @@ async function loadPremiseData(itemCodes) {
     premiseLookup = await supabaseGetAll("premise_lookup?select=premise_code,premise,state,district&order=premise_code.asc");
     const codes = [...new Set(itemCodes.map((code) => Number(code)).filter(Number.isInteger))];
     const codeFilter = codes.length ? `&item_code=in.(${codes.join(",")})` : "";
-    const premiseDaily = await supabaseGetAll(`daily_item_premise_summary?select=metric_date,premise_code,item_code,min_price,median_price,max_price&metric_date=gte.${dailyStartDateForPremise}&metric_date=lte.${dailyDateForPremise}${codeFilter}&order=metric_date.asc,premise_code.asc,item_code.asc`);
-    premiseObservations = premiseDaily.map((row) => {
+    const premiseLatest = await supabaseGetAll(`premise_item_latest?select=premise_code,item_code,price,observed_date,price_age_days${codeFilter}&order=premise_code.asc,item_code.asc`);
+    premiseObservations = premiseLatest.map((row) => {
       const premise = premiseLookup.find((entry) => String(entry.premise_code) === String(row.premise_code));
       return {
-        metricDate: row.metric_date,
+        metricDate: dailyDateForPremise,
+        observedDate: row.observed_date,
+        priceAgeDays: row.price_age_days,
         premiseCode: row.premise_code,
         itemCode: row.item_code,
         state: premise?.state || "",
         district: premise?.district || "",
         premise: premise?.premise || "",
-        median: Number(row.median_price),
-        min: Number(row.min_price),
-        max: Number(row.max_price),
+        median: Number(row.price),
+        min: Number(row.price),
+        max: Number(row.price),
       };
     });
     premiseDataLoaded = true;

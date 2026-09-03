@@ -22,8 +22,9 @@ from pipeline.insights import (
     generate_insight_bundle,
 )
 from pipeline.storage.supabase import (
-    delete_daily_basket_summaries_before,
+    cleanup_daily_tables_before,
     delete_monthly_summaries_before,
+    delete_latest_premise_before,
     delete_observations_before,
     delete_premise_summaries_before,
     get_client,
@@ -31,11 +32,12 @@ from pipeline.storage.supabase import (
     load_daily_basket_summary,
     load_item_area_summary,
     load_item_premise_summary,
+    load_latest_premise,
     load_lookup,
     load_observations,
     load_source_snapshot,
 )
-from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise
+from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise, summarize_latest_premise
 from pipeline.summaries.windows import (
     combined_source_hash,
     previous_month,
@@ -45,6 +47,7 @@ from pipeline.transforms.enrich import enrich_observations
 from pipeline.transforms.pricecatcher import normalize_columns
 
 PREMISE_DETAIL_WINDOW_DAYS = 7
+LATEST_PREMISE_MAX_AGE_DAYS = 45
 MONTHLY_SUMMARY_RETENTION_MONTHS = 6
 
 
@@ -71,13 +74,18 @@ def main() -> None:
     daily_parser.add_argument("--raw-dir", default="data/raw/pricecatcher")
     daily_parser.add_argument("--batch-size", type=int, default=500)
     daily_summary_parser = subparsers.add_parser(
-        "daily-summary", help="Summarize the latest 30 days and load them into Supabase"
+        "daily-summary", help="Summarize the latest 14 days and load them into Supabase"
     )
     daily_summary_parser.add_argument("--raw-dir", default="data/raw/pricecatcher")
-    daily_summary_parser.add_argument("--days", type=int, default=30)
+    daily_summary_parser.add_argument("--days", type=int, default=14)
     daily_summary_parser.add_argument("--as-of", help="Processing date in YYYY-MM-DD; defaults to today")
     daily_summary_parser.add_argument("--limit", type=int, help="Optional row limit for a small connectivity test")
     daily_summary_parser.add_argument("--batch-size", type=int, default=2000)
+    cleanup_parser = subparsers.add_parser(
+        "cleanup", help="Remove daily and premise data older than the retention window"
+    )
+    cleanup_parser.add_argument("--days", type=int, default=14, help="Maximum daily retention in calendar days")
+    cleanup_parser.add_argument("--as-of", help="Retention reference date in YYYY-MM-DD; defaults to today")
     backfill_parser = subparsers.add_parser(
         "backfill-month", help="Summarize one complete month and load it into Supabase"
     )
@@ -148,7 +156,6 @@ def main() -> None:
         delete_monthly_summaries_before(
             client, months_before(as_of, MONTHLY_SUMMARY_RETENTION_MONTHS - 1)
         )
-        delete_daily_basket_summaries_before(client, as_of - timedelta(days=args.days - 1))
         item_count = load_lookup(client, pl.read_parquet(item_result.destination), "item_lookup", args.batch_size)
         premise_count = load_lookup(
             client, pl.read_parquet(premise_result.destination), "premise_lookup", args.batch_size
@@ -174,6 +181,11 @@ def main() -> None:
                     )
         enriched = enrich_observations(
             prices,
+            pl.read_parquet(item_result.destination),
+            pl.read_parquet(premise_result.destination),
+        )
+        full_enriched = enrich_observations(
+            pl.concat([previous, current], how="vertical_relaxed"),
             pl.read_parquet(item_result.destination),
             pl.read_parquet(premise_result.destination),
         )
@@ -206,6 +218,9 @@ def main() -> None:
             recent_window(enriched, as_of, days=PREMISE_DETAIL_WINDOW_DAYS)
         )
         premise_summary_count = load_item_premise_summary(client, premise_daily, source_hash, args.batch_size)
+        latest_premise = summarize_latest_premise(full_enriched, as_of)
+        delete_latest_premise_before(client, as_of - timedelta(days=LATEST_PREMISE_MAX_AGE_DAYS))
+        latest_premise_count = load_latest_premise(client, latest_premise, source_hash, args.batch_size)
         item_lookup_frame = pl.read_parquet(item_result.destination)
         component_codes = []
         for _, category, unit, name_rule in REFERENCE_BASKET_RULES:
@@ -250,10 +265,18 @@ def main() -> None:
         print(
             f"Daily summary load complete: {item_count:,} items, {premise_count:,} premises, "
             f"{daily_count:,} daily, {monthly_count:,} monthly area summaries and "
-            f"{premise_summary_count:,} premise summaries across {args.days} days; "
+            f"{premise_summary_count:,} recent premise summaries and {latest_premise_count:,} latest premise prices; "
             f"{canonical_basket_count:,} canonical basket rows; "
             f"insight provider: {insight_provider}"
         )
+    elif args.command == "cleanup":
+        if args.days < 1:
+            parser.error("cleanup --days must be at least 1")
+        as_of = date.fromisoformat(args.as_of) if args.as_of else date.today()
+        client = get_client()
+        cutoff = as_of - timedelta(days=args.days - 1)
+        cleanup_daily_tables_before(client, cutoff)
+        print(f"Cleanup complete: retained daily data from {cutoff.isoformat()} through {as_of.isoformat()}")
     elif args.command == "backfill-month":
         raw_dir = Path(args.raw_dir)
         source_month = date.fromisoformat(f"{args.month}-01")

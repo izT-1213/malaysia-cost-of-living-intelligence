@@ -12,7 +12,8 @@ The serving retention policy is 30 days of compact daily area summaries, 7 days 
 4. Run `supabase/migrations/003_summary_tables.sql` and then `supabase/migrations/004_daily_item_premise_summary.sql`.
 5. Run `supabase/migrations/005_dashboard_date_indexes.sql`.
 6. Run `supabase/migrations/006_daily_basket_summary.sql` and `supabase/migrations/007_daily_basket_reference.sql` for the canonical dashboard/AI basket totals.
-7. Set `SUPABASE_URL` and `SUPABASE_KEY` in the local `.env` file.
+7. Run `supabase/migrations/008_metric_snapshot_contract.sql` and `supabase/migrations/009_latest_premise_prices.sql` for the shared metric identity and compact latest-known premise prices.
+8. Set `SUPABASE_URL` and `SUPABASE_KEY` in the local `.env` file.
 8. Keep the service key private. It is for the ingestion job only and must never be shipped to the web app.
 9. Leave `STORE_RAW_OBSERVATIONS=false` for the free-tier deployment. Set it to `true` only for an explicitly controlled local run where raw observations are required.
 
@@ -27,6 +28,7 @@ The old project should not be used for recovery because it is locked in read-onl
 - `daily_item_area_summary`: compact recent daily prices by item and area.
 - `daily_basket_summary`: canonical seven-day complete-basket totals by state, shared by the dashboard and AI payload.
 - `daily_item_premise_summary`: compact latest-seven-day prices by item and premise for custom basket comparisons.
+- `premise_item_latest`: one latest observed price per premise and item, with observation date and age, for premise and custom-basket comparisons.
 - `monthly_item_area_summary`: compact historical monthly prices by item and area.
 - `monthly_category_summary`: category-level movement based on comparable item changes.
 - `source_snapshots`: source URLs, hashes, row counts, and retrieval timestamps for reproducibility.

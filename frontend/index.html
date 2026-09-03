@@ -198,30 +198,33 @@
         </section>
 
         <section id="custom-view" class="custom-view" hidden aria-label="Custom basket">
-          <div class="about-intro">
-            <p class="eyebrow">Your basket</p>
-            <h1>Build a basket<br /><em>that fits you.</em></h1>
-            <p>Choose exact tracked items and quantities. When you are ready, generate the same complete-basket comparison used on the dashboard.</p>
+            <div class="about-intro">
+              <p class="eyebrow">Your basket</p>
+              <h1>Build a basket<br /><em>that fits you.</em></h1>
+            <p>Start with a suggested basket, choose any brand within a category, or select an exact tracked item and quantity.</p>
           </div>
           <section class="custom-basket" id="custom-basket" aria-label="Custom basket builder">
             <div class="custom-location-controls">
               <label><span>State</span><select id="custom-state-filter"><option value="all">All states</option></select></label>
               <label><span>District</span><select id="custom-district-filter"><option value="all">All districts</option></select></label>
             </div>
+            <label class="basket-preset-field"><span>Suggested basket</span><select id="basket-preset"><option value="custom">Build your own basket</option><option value="reference">Reference 10-item basket</option><option value="budget">Budget staples basket</option><option value="produce">Fresh produce basket</option><option value="cooking">Cooking essentials basket</option></select></label>
             <div class="basket-builder-controls">
               <label><span>Category</span><select id="custom-category"><option value="all">All categories</option></select></label>
+              <label><span>Unit</span><select id="custom-unit"><option value="">Choose a category first</option></select></label>
               <label><span>Search item</span><input id="custom-item-search" type="search" placeholder="Search official item name" autocomplete="off" /></label>
-              <label><span>Item</span><select id="custom-item"><option value="">Choose an item</option></select></label>
+              <label><span>Item selection</span><select id="custom-item"><option value="">Choose a category first</option></select></label>
               <label class="quantity-field"><span>Quantity</span><input id="custom-quantity" type="number" min="0.01" step="0.01" value="1" /></label>
               <button class="text-button" id="add-basket-item" type="button">Add item</button>
             </div>
+            <p class="custom-basket-copy">“Any brand” uses the lowest-priced eligible tracked item available at each premise and shows which item was used.</p>
             <div class="custom-basket-list" id="custom-basket-list"><span>No items added yet.</span></div>
             <button class="primary-button" id="generate-custom-basket" type="button">Generate comparison</button>
           </section>
           <section class="custom-results" id="custom-results" hidden>
-            <div class="demo-banner"><span class="demo-icon" aria-hidden="true">i</span><span>Comparison uses complete baskets at the same premise. Missing items and premises are excluded.</span></div>
+            <div class="demo-banner"><span class="demo-icon" aria-hidden="true">i</span><span>Comparison uses complete baskets at the same premise. Category selections resolve to one actual tracked item per premise.</span></div>
             <div class="metric-grid custom-metric-grid"></div>
-            <div class="panel custom-result-panel"><div class="panel-heading"><div><p class="eyebrow">Complete-premise comparison</p><h2>Where can I buy this basket?</h2></div></div><div class="table-wrap"><table><thead><tr><th>Premise</th><th>Location</th><th>Basket cost</th></tr></thead><tbody id="custom-result-table"></tbody></table></div></div>
+            <div class="panel custom-result-panel"><div class="panel-heading"><div><p class="eyebrow">Top 10 complete-premise matches</p><h2>Where can I buy this basket?</h2></div></div><div class="table-wrap"><table><thead><tr><th>Premise</th><th>Location</th><th>Basket cost</th><th>Items used</th></tr></thead><tbody id="custom-result-table"></tbody></table></div></div>
           </section>
         </section>
 

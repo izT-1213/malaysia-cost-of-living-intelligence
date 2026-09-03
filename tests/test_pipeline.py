@@ -14,7 +14,7 @@ from pipeline.insights import (
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
 from pipeline.quality.pricecatcher import suspicious_observations, validate_observations
 from pipeline.storage.supabase import load_daily_basket_summary, load_item_area_summary
-from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise
+from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_premise, summarize_latest_premise
 from pipeline.summaries.windows import combined_source_hash, previous_month, recent_window
 from pipeline.transforms.enrich import enrich_observations
 from pipeline.transforms.pricecatcher import normalize_columns
@@ -190,6 +190,18 @@ def test_premise_summary_keeps_each_premise_and_item_separate():
     })
     result = summarize_item_premise(frame)
     assert result.select("premise_code", "item_code", "median_price").rows() == [(2254, 115, 13.0), (2254, 116, 5.0)]
+
+
+def test_latest_premise_keeps_latest_observation_and_age():
+    frame = pl.DataFrame({
+        "date": [date(2026, 8, 1), date(2026, 8, 20), date(2026, 8, 20), date(2026, 7, 20)],
+        "item_id": [115, 115, 115, 116], "premise_id": [2254, 2254, 2254, 2254],
+        "price": [12.0, 14.0, 16.0, 5.0],
+    })
+    result = summarize_latest_premise(frame, date(2026, 8, 22)).sort("item_code")
+    assert result.select("item_code", "price", "observed_date", "price_age_days").rows() == [
+        (115, 15.0, date(2026, 8, 20), 2), (116, 5.0, date(2026, 7, 20), 33)
+    ]
 
 
 class _FakeTable:

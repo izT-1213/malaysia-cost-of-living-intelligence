@@ -96,6 +96,11 @@ def delete_premise_summaries_before(client: Client, cutoff: date) -> None:
     client.table("daily_item_premise_summary").delete().lt("metric_date", cutoff.isoformat()).execute()
 
 
+def delete_latest_premise_before(client: Client, cutoff: date) -> None:
+    """Remove latest-known premise prices older than the accepted age."""
+    client.table("premise_item_latest").delete().lt("observed_date", cutoff.isoformat()).execute()
+
+
 def delete_monthly_summaries_before(client: Client, cutoff: date) -> None:
     """Remove monthly summaries older than the six-calendar-month serving window."""
     client.table("monthly_item_area_summary").delete().lt("metric_month", cutoff.isoformat()).execute()
@@ -104,6 +109,29 @@ def delete_monthly_summaries_before(client: Client, cutoff: date) -> None:
 def delete_daily_basket_summaries_before(client: Client, cutoff: date) -> None:
     """Remove canonical basket summaries older than the rolling daily window."""
     client.table("daily_basket_summary").delete().lt("metric_date", cutoff.isoformat()).execute()
+
+
+def cleanup_daily_tables_before(client: Client, cutoff: date) -> None:
+    """Delete old daily rows one calendar date at a time to avoid timeouts."""
+    for table, column in (
+        ("daily_item_area_summary", "metric_date"),
+        ("daily_item_premise_summary", "metric_date"),
+        ("daily_basket_summary", "metric_date"),
+        ("price_observations", "observed_date"),
+    ):
+        while True:
+            result = (
+                client.table(table)
+                .select(column)
+                .lt(column, cutoff.isoformat())
+                .order(column, desc=False)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(result, "data", None) or []
+            if not rows or not rows[0].get(column):
+                break
+            client.table(table).delete().eq(column, rows[0][column]).execute()
 
 
 def load_item_area_summary(
@@ -178,6 +206,23 @@ def load_item_premise_summary(client: Client, frame: pl.DataFrame, source_sha256
         submitted += len(batch)
         if batch_number == 1 or batch_number % 10 == 0 or batch_number == total_batches:
             print(f"Premise summary upload: {submitted:,}/{len(rows):,} rows", flush=True)
+    return submitted
+
+
+def load_latest_premise(client: Client, frame: pl.DataFrame, source_sha256: str, batch_size: int = 500) -> int:
+    """Upsert one latest-known price per premise and item."""
+    required = {"premise_code", "item_code", "price", "observed_date", "price_age_days"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"Missing latest premise columns: {', '.join(sorted(missing))}")
+    rows = [
+        {**row, "observed_date": row["observed_date"].isoformat(), "source_snapshot_sha256": source_sha256}
+        for row in frame.select(sorted(required)).to_dicts()
+    ]
+    submitted = 0
+    for batch in _chunks(rows, batch_size):
+        client.table("premise_item_latest").upsert(batch, on_conflict="premise_code,item_code").execute()
+        submitted += len(batch)
     return submitted
 
 

@@ -114,6 +114,45 @@ def summarize_item_premise(frame: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def summarize_latest_premise(frame: pl.DataFrame, as_of) -> pl.DataFrame:
+    """Keep the latest observed price for each premise and item."""
+    required = {"date", "item_id", "premise_id", "price"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"Missing latest premise columns: {', '.join(sorted(missing))}")
+    base = (
+        frame.select("date", "item_id", "premise_id", "price")
+        .with_columns(
+            pl.col("date").cast(pl.Date, strict=False),
+            pl.col("item_id").cast(pl.Int64, strict=False),
+            pl.col("premise_id").cast(pl.Int64, strict=False),
+            pl.col("price").cast(pl.Float64, strict=False),
+            pl.col("date").alias("observed_date"),
+        )
+        .filter(
+            pl.col("date").is_not_null() & (pl.col("date") <= as_of)
+            & pl.col("item_id").is_not_null() & pl.col("premise_id").is_not_null()
+            & pl.col("price").is_not_null() & (pl.col("price") > 0)
+        )
+    )
+    if base.is_empty():
+        return pl.DataFrame(schema={
+            "premise_code": pl.Int64, "item_code": pl.Int64, "price": pl.Float64,
+            "observed_date": pl.Date, "price_age_days": pl.Int64,
+        })
+    latest = base.group_by(["premise_id", "item_id"]).agg(
+        pl.col("date").max().alias("observed_date"),
+    )
+    result = latest.join(base, on=["premise_id", "item_id", "observed_date"], how="left").group_by(
+        ["premise_id", "item_id", "observed_date"]
+    ).agg(pl.col("price").median().alias("price")).with_columns(
+        (pl.lit(as_of) - pl.col("observed_date")).dt.total_days().cast(pl.Int64).alias("price_age_days")
+    )
+    return result.rename({"premise_id": "premise_code", "item_id": "item_code"}).select(
+        "premise_code", "item_code", "price", "observed_date", "price_age_days"
+    ).sort(["premise_code", "item_code"])
+
+
 def _summarize_group(
     frame: pl.DataFrame,
     group_columns: list[str],
