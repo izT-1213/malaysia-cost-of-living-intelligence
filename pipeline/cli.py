@@ -156,6 +156,7 @@ def main() -> None:
         delete_monthly_summaries_before(
             client, months_before(as_of, MONTHLY_SUMMARY_RETENTION_MONTHS - 1)
         )
+        cleanup_daily_tables_before(client, as_of - timedelta(days=args.days - 1))
         item_count = load_lookup(client, pl.read_parquet(item_result.destination), "item_lookup", args.batch_size)
         premise_count = load_lookup(
             client, pl.read_parquet(premise_result.destination), "premise_lookup", args.batch_size
