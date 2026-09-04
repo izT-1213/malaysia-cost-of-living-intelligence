@@ -701,8 +701,11 @@ function renderStateBasketChart(rows) {
   }
   const sorted = [...visible].sort((a, b) => b.median - a.median || a.state.localeCompare(b.state));
   const max = Math.max(...sorted.map((row) => row.median));
+  const chartMedian = roundCurrency(medianOf(sorted.map((row) => row.median)));
+  const medianPosition = 35 + (chartMedian / max) * 60;
   chart.innerHTML = sorted.map((row) => `
-    <div class="bar-row"><span class="bar-label">${row.state}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i></div><strong>${money(row.median)}</strong></div>`).join("");
+    <div class="bar-row"><span class="bar-label">${row.state}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i></div><strong>${money(row.median)}</strong></div>`).join("")
+    + `<div class="chart-median-line" style="left:${medianPosition}%" role="img" aria-label="Median of visible areas: ${money(chartMedian)}"><span>Median ${money(chartMedian)}</span></div>`;
 }
 
 function basketTrendRows(period) {
@@ -793,7 +796,7 @@ function renderTable(rows) {
         <th scope="row">${row.name}</th>
         <td>${money(row.median)}</td>
         <td>${row.difference === 0 ? "—" : `${row.difference > 0 ? "+" : "−"}${money(Math.abs(row.difference))}`}</td>
-        <td title="${row.carriedForwardDates?.length ? `Carried forward from ${row.carriedForwardDates.map(formatMetricDate).join(", ")}` : "Observed in the current window"}">${Math.round(row.coverage * componentCount)}/${componentCount}${row.complete ? "" : " observed"}${row.carriedForwardDates?.length ? " · carried" : ""}</td>
+        <td title="${row.carriedForwardDates?.length ? `Carried forward from ${row.carriedForwardDates.map(formatMetricDate).join(", ")}` : "Observed in the current window"}">${Number.isFinite(row.coverage) ? Math.round(row.coverage * componentCount) : 0}/${componentCount}${row.complete ? "" : " observed"}${row.carriedForwardDates?.length ? " · carried" : ""}</td>
         <td>${metricWindowLabel()}</td>
       </tr>`).join("");
     return;
