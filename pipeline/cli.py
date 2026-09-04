@@ -242,15 +242,23 @@ def main() -> None:
             daily, as_of, item_lookup_frame, complete_premise_count
         )
         canonical_metric_date = date.fromisoformat(insight_payload["latest_metric_date"])
-        canonical_basket_count = load_daily_basket_summary(
-            client,
-            canonical_metric_date,
-            insight_payload.get("states", []),
-            insight_payload["reference_basket"]["basket_median_reference"],
-            source_hash,
-            args.batch_size,
-            insight_payload["metric_snapshot_id"],
-        )
+        reference_basket = insight_payload.get("reference_basket")
+        if reference_basket is None:
+            canonical_basket_count = 0
+            print(
+                "No complete reference basket is available in the current window; "
+                "skipping canonical basket rows."
+            )
+        else:
+            canonical_basket_count = load_daily_basket_summary(
+                client,
+                canonical_metric_date,
+                insight_payload.get("states", []),
+                reference_basket["basket_median_reference"],
+                source_hash,
+                args.batch_size,
+                insight_payload["metric_snapshot_id"],
+            )
         insight_bundle, insight_provider, insight_model, insight_failure_reason = generate_insight_bundle(insight_payload)
         insight_payload_with_status = {
             **insight_payload,

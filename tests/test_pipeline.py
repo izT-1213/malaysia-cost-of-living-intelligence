@@ -335,3 +335,26 @@ def test_daily_insight_basket_uses_shared_window_and_median_reference():
     assert payload["metric_contract"]["observed_day_count"] == 7
     assert payload["metric_contract"]["complete_state_count"] == 3
     assert payload["metric_snapshot_id"] == metric_snapshot_id(payload["metric_contract"])
+
+
+def test_daily_insight_payload_allows_no_complete_reference_basket():
+    summary = pl.DataFrame({
+        "metric_date": [date(2026, 8, 8)],
+        "area_level": ["state"],
+        "state": ["Johor"],
+        "district": [""],
+        "item_code": [1],
+        "median_price": [10.0],
+    })
+    item_lookup = pl.DataFrame({
+        "item_code": [1],
+        "item": ["BERAS PREMIUM"],
+        "unit": ["10 kg"],
+        "item_category": ["BERAS"],
+    })
+
+    payload = build_daily_insight_payload(summary, date(2026, 8, 8), item_lookup)
+
+    assert "reference_basket" not in payload
+    assert payload["metric_contract"]["complete_state_count"] == 0
+    assert payload["metric_snapshot_id"] == metric_snapshot_id(payload["metric_contract"])
