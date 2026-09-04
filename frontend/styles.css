@@ -96,6 +96,7 @@ button, select { font: inherit; }
 .premise-analysis-grid .metric-card strong { font-size: 22px; }
 .chart-panel { margin-top: 14px; }
 .bar-chart, .premise-chart { display: grid; gap: 10px; position: relative; }
+.bar-chart { display: flex; flex-direction: column; }
 .chart-subtitle { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .basket-trend-chart { display: flex; align-items: end; gap: clamp(8px, 1.6vw, 20px); min-height: 230px; margin-top: 18px; padding: 22px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .basket-trend-column { flex: 1 0 42px; min-width: 42px; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 7px; height: 205px; }
@@ -105,7 +106,7 @@ button, select { font: inherit; }
 .bar-row { display: grid; grid-template-columns: minmax(120px, 1.1fr) 3fr auto; gap: 12px; align-items: center; }
 .bar-track { position: relative; }
 .bar-median-marker { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--orange); opacity: .9; pointer-events: none; z-index: 2; }
-.chart-median-key { grid-column: 2 / 4; justify-self: end; display: flex; gap: 6px; align-items: center; color: var(--orange); font: 10px 'DM Mono'; }
+.chart-median-key { align-self: flex-end; display: flex; gap: 6px; align-items: center; color: var(--orange); font: 10px 'DM Mono'; }
 .chart-median-key i { display: inline-block; width: 16px; height: 2px; background: var(--orange); }
 .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .bar-track { height: 14px; overflow: hidden; border-radius: 4px; background: color-mix(in srgb, var(--line) 55%, transparent); }

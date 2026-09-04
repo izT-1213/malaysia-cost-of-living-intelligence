@@ -699,6 +699,7 @@ function renderStateBasketChart(rows) {
     chart.innerHTML = "";
     return;
   }
+  // Rank highest to lowest so the horizontal bars can be compared vertically.
   const sorted = [...visible].sort((a, b) => b.median - a.median || a.state.localeCompare(b.state));
   const max = Math.max(...sorted.map((row) => row.median));
   const chartMedian = roundCurrency(medianOf(sorted.map((row) => row.median)));
