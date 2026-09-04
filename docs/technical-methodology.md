@@ -6,8 +6,10 @@ browser only formats and filters already calculated summaries.
 
 ## Observed-day coverage
 
-The daily window is seven inclusive calendar dates ending at the latest metric
-date. PriceCatcher does not guarantee a row on every calendar date. The
+The latest-observation window is seven inclusive calendar dates ending at the
+latest metric date available in PriceCatcher. PriceCatcher does not guarantee a
+row on every calendar date, so this is an analytical window rather than a claim
+that the source publishes daily. The
 pipeline keeps the available dates and reports both the calendar window and
 the distinct observed dates. A display of `6 observed days in a 7-calendar-day
 window` is therefore incomplete operational coverage, not a seven-day

@@ -27,7 +27,7 @@
           <span class="status-dot" aria-hidden="true"></span>
           <span>PriceCatcher data</span>
           <span class="divider" aria-hidden="true"></span>
-          <span>Updated daily</span>
+          <span>Latest source available</span>
           <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme (currently system mode)"><span aria-hidden="true">☼</span><span id="theme-label">System</span></button>
         </div>
       </header>
@@ -63,7 +63,7 @@
           <label>
             <span>Period</span>
             <select id="period-filter">
-              <option value="daily">Latest 7 days</option>
+              <option value="daily">Latest available 7-day window</option>
               <option value="monthly">Monthly view</option>
             </select>
           </label>
@@ -79,7 +79,7 @@
 
         <div class="demo-banner" id="data-status" data-status="loading" role="status" aria-live="polite" aria-busy="true">
           <span class="demo-icon" aria-hidden="true">i</span>
-          <span id="data-status-message">Loading live data from Supabase…</span>
+          <span id="data-status-message">Loading the latest available data from Supabase…</span>
           <button class="text-button" id="retry-data" type="button" hidden>Retry</button>
         </div>
 
@@ -119,7 +119,7 @@
           </article>
 
           <article class="panel insight-panel">
-            <p class="eyebrow">Today’s signal</p>
+            <p class="eyebrow">Current signal</p>
             <h2>Where is the spread widest?</h2>
             <div class="signal-number">RM 7.90</div>
             <p class="signal-copy">Difference between the lowest and highest observed prices in the current selection.</p>
@@ -133,7 +133,7 @@
         <section class="panel chart-panel" id="state-basket-chart-panel" aria-label="Reference basket cost by state">
           <div class="panel-heading">
             <div><p class="eyebrow">Comparison chart</p><h2>Reference basket cost by state</h2></div>
-            <span class="trend-badge">RM · Complete baskets · Latest 7 days</span>
+            <span class="trend-badge">RM · Complete baskets · Latest available window</span>
           </div>
           <div class="bar-chart" id="state-basket-chart"></div>
         </section>
@@ -141,7 +141,7 @@
         <section class="panel chart-panel basket-trend-panel" id="basket-trend-panel" aria-label="Reference basket cost over time">
           <div class="panel-heading">
             <div><p class="eyebrow">Basket movement</p><h2 id="basket-trend-title">Reference basket cost over time</h2></div>
-            <span class="trend-badge" id="basket-trend-badge">RM · Daily · Latest 7 days</span>
+            <span class="trend-badge" id="basket-trend-badge">RM · Observation window · Latest available</span>
           </div>
           <p class="chart-subtitle" id="basket-trend-subtitle">Median complete basket across states. Only areas with every reference-basket component are included.</p>
           <div class="basket-trend-chart" id="basket-trend-chart"></div>
@@ -187,7 +187,7 @@
             <div class="state-map" id="state-map" role="group" aria-label="Malaysia state insight map"></div>
             <div class="state-detail" id="state-detail" aria-live="polite"><p class="eyebrow">Selected state</p><h3 id="state-detail-name">Select a state</h3><strong id="state-detail-value">—</strong><p id="state-detail-copy">State-level insight will appear here.</p><div class="state-detail-facts" id="state-detail-facts"></div><div class="state-component-breakdown" id="state-component-breakdown"></div></div>
             <section class="state-premise-analysis" aria-live="polite">
-              <div class="panel-heading"><div><p class="eyebrow">Premise analysis</p><h3 id="premise-analysis-heading">Where can this basket be completed?</h3></div><span class="trend-badge" id="premise-analysis-window">Latest 7 days</span></div>
+              <div class="panel-heading"><div><p class="eyebrow">Premise analysis</p><h3 id="premise-analysis-heading">Where can this basket be completed?</h3></div><span class="trend-badge" id="premise-analysis-window">Latest available 7-day window</span></div>
               <p class="ai-map-copy" id="premise-analysis-copy">Select a state to compare complete reference baskets across its premises. State-level coverage may combine multiple premises and days; premise analysis requires all 10 items at one premise.</p>
               <div class="premise-analysis-grid" id="premise-analysis-grid"></div>
               <div class="premise-chart" id="premise-analysis-chart"></div>
@@ -247,11 +247,11 @@
             <div class="methodology-grid">
               <article class="about-card"><p class="eyebrow">Source and mapping</p><h2>Official catalogue</h2><p>PriceCatcher monthly Parquet snapshots are preserved as raw inputs. Official item and premise lookup tables map stable item codes, units, premises, states, and districts before metrics are calculated.</p><a href="https://data.gov.my/data-catalogue/pricecatcher" target="_blank" rel="noreferrer">View official catalogue ↗</a></article>
               <article class="about-card"><p class="eyebrow">Calculation rules</p><h2>Complete observations</h2><p>Item prices use observed medians with deterministic minimum and maximum values. A basket is the unweighted sum of its component medians, and areas missing any component are excluded rather than treated as zero.</p></article>
-              <article class="about-card"><p class="eyebrow">Time and storage</p><h2>Compact rolling summaries</h2><p>Raw source Parquet files are preserved before transformation. The free-tier Supabase serving layer stores compact daily area and premise summaries for up to 14 calendar days, and six months of monthly summaries. The dashboard currently uses the latest seven daily days.</p></article>
+              <article class="about-card"><p class="eyebrow">Time and storage</p><h2>Compact rolling summaries</h2><p>Raw source Parquet files are preserved before transformation. The free-tier Supabase serving layer stores compact daily area and premise summaries for up to 14 calendar days, and six months of monthly summaries. The dashboard uses the latest available seven-calendar-day observation window.</p></article>
               <article class="about-card"><p class="eyebrow">Data quality</p><h2>Coverage, not confidence</h2><p>Coverage quality is described using observed days, complete items, premises, and missingness. These are operational indicators, not statistical confidence intervals.</p><div class="quality-list" id="about-quality-list"><span>Waiting for live quality indicators.</span></div></article>
               <article class="about-card"><p class="eyebrow">Pipeline architecture</p><h2>ETL, built for a free tier</h2><p>PriceCatcher files are extracted and preserved, transformed by the Python pipeline in GitHub Actions, then loaded as compact summaries into Supabase. Source snapshots are hashed and summary loads use stable keys and upserts, so reruns remain incremental, idempotent, and reproducible.</p></article>
               <article class="about-card"><p class="eyebrow">AI boundary</p><h2>Gemini explains, code calculates</h2><p>When enabled, the Gemini API receives structured, validated summaries only and explains the metrics in plain language. Code calculates every price statistic; if Gemini is unavailable, the dashboard uses a deterministic rule-based fallback.</p></article>
-              <article class="about-card methodology-detail-card"><p class="eyebrow">Technical methodology</p><h2>How to read coverage</h2><p>A daily view uses seven inclusive calendar dates, but may contain fewer observed days. State baskets can combine premises; premise baskets require all 10 items at one premise. Min, median, and max use the same filtered item population, while basket extrema are component-wise bounds. Dashboard and AI share a deterministic metric snapshot ID.</p><p>Monthly fallback wording applies only to the monthly view when its latest month is incomplete. Invalid records are excluded from metrics, suspicious extremes are flagged for review, and raw Parquet is preserved.</p><a href="https://github.com/izT-1213/malaysia-cost-of-living-intelligence/blob/main/docs/technical-methodology.md" target="_blank" rel="noreferrer">Read the technical methodology notes ↗</a></article>
+              <article class="about-card methodology-detail-card"><p class="eyebrow">Technical methodology</p><h2>How to read coverage</h2><p>The latest-observation view uses seven inclusive calendar dates ending at the newest date available, but may contain fewer observed dates because PriceCatcher is not a guaranteed daily feed. State baskets can combine premises; premise baskets require all 10 items at one premise. Min, median, and max use the same filtered item population, while basket extrema are component-wise bounds. Dashboard and AI share a deterministic metric snapshot ID.</p><p>Monthly fallback wording applies only to the monthly view when its latest month is incomplete. Invalid records are excluded from metrics, suspicious extremes are flagged for review, and raw Parquet is preserved.</p><a href="https://github.com/izT-1213/malaysia-cost-of-living-intelligence/blob/main/docs/technical-methodology.md" target="_blank" rel="noreferrer">Read the technical methodology notes ↗</a></article>
             </div>
             <p class="methodology-footnote" id="about-freshness">Known limitations: coverage varies by place and day; prices are observed medians, not guaranteed store prices or a replacement for CPI.</p>
           </section>

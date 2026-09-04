@@ -11,7 +11,7 @@ The official monthly Parquet currently exposes four source columns:
 - `item_code`
 - `price`
 
-The source file is updated daily while retaining a `YYYY-MM` distribution URL. The pipeline downloads the current month automatically and preserves each retrieved snapshot by content hash.
+The distribution may be refreshed daily while retaining a `YYYY-MM` distribution URL, but the observations inside it are not guaranteed to cover every calendar date. The pipeline downloads the current month automatically, selects the latest observation date available, and preserves each retrieved snapshot by content hash.
 
 The lookup tables are required to enrich the source observations. Expected normalized concepts include:
 

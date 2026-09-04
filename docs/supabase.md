@@ -2,7 +2,7 @@
 
 Supabase is the application database and serving layer. The scheduled free-tier setup keeps source files only in the temporary GitHub Actions workspace while a run is executing; it stores lookup data, source metadata, and compact summaries in PostgreSQL. Raw observations are optional and disabled by default.
 
-The serving retention policy is 14 days of compact daily area and premise-level summaries, and 6 calendar months of monthly summaries. The public dashboard currently reads the latest 7 daily days; the extra 7 days support the prior comparison window and late-arriving data without requiring raw observations in Supabase. Run `python -m pipeline.cli cleanup --days 14` to enforce the daily retention boundary.
+The serving retention policy is 14 days of compact daily area and premise-level summaries, and 6 calendar months of monthly summaries. The public dashboard currently reads the latest available seven-calendar-day observation window; the extra 7 days support the prior comparison window and late-arriving data without requiring raw observations in Supabase. Run `python -m pipeline.cli cleanup --days 14` to enforce the daily retention boundary.
 
 ## Local setup
 

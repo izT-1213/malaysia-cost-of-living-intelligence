@@ -128,12 +128,12 @@ function renderAiGeneralFacts() {
   const limitedDays = dayCount > 0 && dayCount < DAILY_WINDOW_DAYS;
   const lowCoverageCopy = lowCoverage.length
     ? `${lowCoverage.length} state${lowCoverage.length === 1 ? "" : "s"} use fewer than 7 observed days`
-    : limitedDays ? `${dayCount} of ${DAILY_WINDOW_DAYS} calendar days are observed in the current window` : "All complete states use 7 observed days";
+    : limitedDays ? `${dayCount} of ${DAILY_WINDOW_DAYS} calendar days are observed in the latest available window` : "All complete states use the available observation dates";
   target.innerHTML = [
     ["States", basket?.complete_states ?? stateCount, "Complete reference-basket states"],
     ["Premises", premiseCount, premiseDataLoaded ? "Loaded premise observations" : "Loaded when a state is selected"],
     ["Items", itemCount, "Reference components in scope"],
-    ["Observed days", dayCount || "—", basket?.period || "Current metric window"],
+    ["Observed dates", dayCount || "—", basket?.period || "Latest available metric window"],
     ["Basket reference", basket ? money(Number(basket.basket_median_reference)) : "—", "Median across complete states"],
     ["Coverage quality", lowCoverage.length || limitedDays ? "Limited" : "Available", lowCoverageCopy],
   ].map(([label, value, caption]) => `<article class="ai-fact"><span class="metric-label">${label}</span><strong>${value}</strong><small>${caption}</small></article>`).join("");
@@ -199,7 +199,7 @@ function liveDataStatusCopy() {
   if (period === "monthly") {
     return `Connected to live data · monthly view: ${monthlyDisplayDate || "pending"}${monthlyFallback ? " · latest complete month fallback" : ""}`;
   }
-  return `Connected to live data · daily view through ${dailyDateForPremise || "pending"} · ${metricWindowLabel("daily")}`;
+  return `Connected to live data · latest available observations through ${dailyDateForPremise || "pending"} · ${metricWindowLabel("daily")}`;
 }
 
 function lastSuccessfulCopy() {
@@ -220,7 +220,7 @@ function latestWindowRows(rows, days = DAILY_WINDOW_DAYS) {
 function metricWindowLabel(period = document.querySelector("#period-filter")?.value || "daily") {
   const source = period === "monthly" ? datasets.monthly : datasets.daily;
   const dates = [...new Set(source.map((row) => row.metricDate).filter(Boolean))].sort();
-  if (!dates.length) return period === "monthly" ? "Selected month" : "Latest 7 calendar days";
+  if (!dates.length) return period === "monthly" ? "Selected month" : "Latest available 7-calendar-day window";
   if (period === "monthly") return formatMetricDate(dates[dates.length - 1]);
   const start = new Date(`${dates[dates.length - 1]}T00:00:00Z`);
   start.setUTCDate(start.getUTCDate() - (DAILY_WINDOW_DAYS - 1));
@@ -275,7 +275,7 @@ function renderAboutQuality() {
   const days = new Set(stateRows.map((row) => row.metricDate)).size;
   const premises = premiseDataLoaded ? new Set(premiseObservations.map((row) => String(row.premiseCode))).size : "Loaded on AI or basket comparison";
   target.innerHTML = [
-    ["Observed days", `${days}/7`, "Current daily window"],
+    ["Observed dates", `${days}/7`, "Latest available window"],
     ["Complete states", `${completeStates}/${states.length}`, "All 10 items available"],
     ["Premises", premises, "Loaded premise detail"],
   ].map(([label, value, caption]) => `<span><strong>${value}</strong><small>${label} · ${caption}</small></span>`).join("");
@@ -659,7 +659,7 @@ function renderMetrics(rows) {
   document.querySelector("#median-caption").textContent = rows.length === 1 ? (districtFilter.value === "all" ? rows[0].state : rows[0].district) : "Across selected areas";
   document.querySelector("#current-view-label").textContent = document.querySelector("#period-filter").value === "monthly"
     ? (monthlyFallback ? "Latest complete month · fallback" : "Monthly basket prices")
-    : "Latest 7-day basket prices";
+    : "Latest available basket prices";
   document.querySelector("#current-date-range").textContent = metricWindowLabel();
   document.querySelector("#method-copy").textContent = `Based on complete observations from ${metricWindowLabel()}. Prices are median observed prices, not guaranteed store prices. Missing items are never treated as zero.`;
   const areaField = districtFilter.value === "all" ? "state" : "district";
@@ -841,10 +841,10 @@ function render() {
     document.querySelector(".signal-copy").textContent = unavailable
       ? "Live data could not be loaded. Use Retry above when the service is available."
       : basketMode
-      ? "The source has daily observations, but no selected area has every item in this basket across the latest seven-day window. Try Monthly view or adjust the filters."
+      ? "The source has observations, but no selected area has every item in this basket across the latest available seven-day window. Try Monthly view or adjust the filters."
       : "There are no observations for the selected item and area. Try another filter or period.";
     document.querySelector("#table-title").textContent = unavailable ? "Live data unavailable" : basketMode ? "Basket availability" : "No matching observations";
-    table.innerHTML = `<tr><td colspan="5">${unavailable ? "Live data is temporarily unavailable. No values are shown until it loads successfully." : dataStatus === "empty" ? "Live data is connected, but no matching observations are available for this period." : basketMode ? "Daily data is available, but no area has a complete reference basket in the latest seven-day window." : "No rows match the current filters."}</td></tr>`;
+    table.innerHTML = `<tr><td colspan="5">${unavailable ? "Live data is temporarily unavailable. No values are shown until it loads successfully." : dataStatus === "empty" ? "Live data is connected, but no matching observations are available for this period." : basketMode ? "Data is available, but no area has a complete reference basket in the latest available seven-day window." : "No rows match the current filters."}</td></tr>`;
     if (monthlyView && !unavailable) {
       document.querySelector("#current-view-label").textContent = monthlyFallback ? "Latest complete month · fallback" : "No complete monthly basket available";
       document.querySelector("#current-date-range").textContent = metricWindowLabel("monthly");
@@ -911,7 +911,7 @@ document.querySelector("#period-filter").addEventListener("change", (event) => {
   replaceOptions(customCategory, availableCustomItems().map((item) => item.item_category));
   populateCustomItemOptions();
   document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Latest available prices";
-  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
+  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest available window";
   populateFilters();
   render();
   if (supabaseLoaded) setDataStatus("success", liveDataStatusCopy());
@@ -988,7 +988,7 @@ document.querySelector("#reset-filters").addEventListener("click", () => {
   populateCustomItemOptions();
   populateCustomLocationFilters();
   document.querySelector(".hero-note strong").textContent = actualPeriod === "monthly" ? "Monthly item prices" : "Latest available prices";
-  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest 7 days";
+  document.querySelector(".trend-badge").textContent = actualPeriod === "monthly" ? "Historical month" : "Latest available window";
   render();
 });
 document.querySelector("#download-button").addEventListener("click", () => {
@@ -1220,7 +1220,7 @@ async function loadSupabaseData() {
   populateCustomItemOptions();
   populateCustomLocationFilters();
   document.querySelector(".hero-note strong").textContent = periodFilter.value === "monthly" ? "Monthly item prices" : "Latest available prices";
-  document.querySelector(".trend-badge").textContent = periodFilter.value === "monthly" ? "Historical month" : "Latest 7 days";
+  document.querySelector(".trend-badge").textContent = periodFilter.value === "monthly" ? "Historical month" : "Latest available window";
   districts = {};
   dailyDistricts.forEach((row) => {
     if (row.district) districts[row.state] = [...new Set([...(districts[row.state] || []), row.district])];
@@ -1274,7 +1274,7 @@ function startDataLoad() {
   if (loadPromise) return loadPromise;
   activeLoadController = new AbortController();
   const loadTimeout = window.setTimeout(() => activeLoadController?.abort(), 20000);
-  setDataStatus("loading", "Loading live data from Supabase…");
+  setDataStatus("loading", "Loading the latest available data from Supabase…");
   render();
   loadPromise = loadSupabaseData().catch((error) => {
     console.warn("Live data could not be loaded.", error);
