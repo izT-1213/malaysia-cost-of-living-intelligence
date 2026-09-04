@@ -1110,7 +1110,10 @@ function toRows(rows, itemNames) {
 
 async function loadAiInsight() {
   if (aiLoadPromise) return aiLoadPromise;
-  if (!supabaseLoaded || !datasets.daily.length) {
+  const period = document.querySelector("#period-filter")?.value || "daily";
+  const sourceRows = period === "monthly" ? datasets.monthly : datasets.daily;
+  const insightType = period === "monthly" ? "monthly_summary" : "daily_summary";
+  if (!supabaseLoaded || !sourceRows.length) {
     aiInsightStatus = "not available";
     document.querySelector("#ai-insight-copy").textContent = "AI insight requires live structured data first.";
     document.querySelector("#ai-general-copy").textContent = "AI insight requires live structured data first.";
@@ -1122,21 +1125,23 @@ async function loadAiInsight() {
   document.querySelector("#ai-general-meta").textContent = "AI insights load separately from the main dashboard data.";
   aiLoadPromise = (async () => {
     try {
-      const insights = await supabaseGet("ai_insights?select=generated_text,provider,insight_date,analytical_payload&insight_type=eq.daily_summary&order=insight_date.desc&limit=1");
+      const insights = await supabaseGet(`ai_insights?select=generated_text,provider,insight_date,insight_type,analytical_payload&insight_type=eq.${insightType}&order=insight_date.desc&limit=1`);
       const latestInsight = insights[0];
       const payload = latestInsight?.analytical_payload || {};
+      const metricDate = period === "monthly" ? monthlyDisplayDate : dailyDateForPremise;
       const currentReference = structuredReferenceBasketValue(datasets.daily);
       const storedReference = Number(payload.reference_basket?.basket_median_reference);
       const storedSnapshotId = payload.metric_snapshot_id || "";
       const matchesCurrentData = Boolean(
-        latestInsight
-        && dailyDateForPremise
-        && payload.latest_metric_date === dailyDateForPremise
-        && dailyMetricSnapshotId
-        && storedSnapshotId === dailyMetricSnapshotId
-        && currentReference !== null
-        && Number.isFinite(storedReference)
-        && Math.abs(currentReference - storedReference) < 0.005
+        latestInsight && metricDate
+        && (period === "monthly"
+          ? payload.latest_metric_month === metricDate
+          : payload.latest_metric_date === metricDate
+            && dailyMetricSnapshotId
+            && storedSnapshotId === dailyMetricSnapshotId
+            && currentReference !== null
+            && Number.isFinite(storedReference)
+            && Math.abs(currentReference - storedReference) < 0.005)
       );
       aiInsightStatus = matchesCurrentData ? "stored and current" : latestInsight ? "withheld as stale" : "not available";
       aiInsightBundle = matchesCurrentData ? payload : { general: "", states: {} };
@@ -1147,7 +1152,7 @@ async function loadAiInsight() {
       document.querySelector("#ai-general-copy").textContent = generalInsight;
       renderAiGeneralFacts();
       document.querySelector("#ai-general-meta").textContent = latestInsight
-        ? `Stored ${latestInsight.insight_date} · ${latestInsight.provider || "rule-based"} explanation · ${aiInsightStatus} · metric date ${payload.latest_metric_date || "unknown"}`
+        ? `Stored ${latestInsight.insight_date} · ${latestInsight.provider || "rule-based"} explanation · ${aiInsightStatus} · ${period} period ${payload.latest_metric_month || payload.latest_metric_date || "unknown"}`
         : "No stored insight is available. Structured metrics remain available without AI.";
     } catch (error) {
       console.warn("AI insight is not available; structured metrics remain available.", error);

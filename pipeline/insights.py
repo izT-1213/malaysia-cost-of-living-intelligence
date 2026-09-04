@@ -309,6 +309,58 @@ def build_daily_insight_payload(
     return payload
 
 
+def build_monthly_insight_payload(
+    current: pl.DataFrame,
+    previous: pl.DataFrame,
+    metric_month: date,
+    prior_insights: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build a compact month-over-month payload for the optional AI explanation."""
+    def state_values(frame: pl.DataFrame) -> dict[str, float]:
+        rows = frame.filter(pl.col("area_level") == "state")
+        return {
+            row["state"]: round(float(row["median_price"]), 2)
+            for row in rows.group_by("state").agg(pl.col("median_price").median()).to_dicts()
+        }
+
+    def item_values(frame: pl.DataFrame) -> dict[int, float]:
+        rows = frame.filter(pl.col("area_level") == "state")
+        return {
+            int(row["item_code"]): round(float(row["median_price"]), 2)
+            for row in rows.group_by("item_code").agg(pl.col("median_price").median()).to_dicts()
+        }
+
+    current_states, previous_states = state_values(current), state_values(previous)
+    current_items, previous_items = item_values(current), item_values(previous)
+    reference = round(_median(list(current_states.values())), 2) if current_states else None
+    states = [
+        {
+            "state": state,
+            "median_price": value,
+            "change_from_previous_month": round(value - previous_states[state], 2)
+            if state in previous_states else None,
+            "difference_from_monthly_reference": round(value - reference, 2)
+            if reference is not None else None,
+        }
+        for state, value in sorted(current_states.items())
+    ]
+    item_changes = [
+        {"item_code": code, "change": round(value - previous_items[code], 2)}
+        for code, value in current_items.items() if code in previous_items
+    ]
+    item_changes.sort(key=lambda row: (-abs(row["change"]), row["item_code"]))
+    return {
+        "as_of": metric_month.isoformat(),
+        "latest_metric_month": metric_month.isoformat(),
+        "previous_metric_month": previous.select(pl.col("metric_month").max()).item().isoformat()
+        if previous.height else None,
+        "states": states,
+        "monthly_reference": reference,
+        "largest_item_changes": item_changes[:5],
+        "prior_insights": prior_insights or [],
+    }
+
+
 def fallback_explanation(payload: dict[str, Any]) -> str:
     """Provide useful copy when no external AI provider is configured."""
     basket = payload.get("reference_basket")
@@ -495,15 +547,22 @@ def _parse_gemini_bundle(response_text: str) -> dict[str, Any]:
 
 def generate_insight_bundle(
     payload: dict[str, Any],
+    insight_type: str = "daily_summary",
 ) -> tuple[dict[str, Any], str, str | None, str | None]:
     """Return notes, provider metadata, and an optional fallback reason."""
     provider_name = os.getenv("AI_PROVIDER", "disabled").strip().lower()
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
-    fallback = {
-        "general": fallback_explanation(payload),
-        "states": fallback_state_explanations(payload),
-    }
+    if insight_type == "monthly_summary":
+        fallback = {
+            "general": "Monthly insight is based on the latest month compared with the previous month; the direction is more useful than a single-day reading.",
+            "states": {
+                row["state"]: f"{row['state']} was {('up' if (row.get('change_from_previous_month') or 0) > 0 else 'down' if (row.get('change_from_previous_month') or 0) < 0 else 'steady')} by RM {abs(row.get('change_from_previous_month') or 0):.2f} from the previous month."
+                for row in payload.get("states", [])
+            },
+        }
+    else:
+        fallback = {"general": fallback_explanation(payload), "states": fallback_state_explanations(payload)}
     if provider_name != "gemini" or not api_key:
         return fallback, "rule_based", None, "gemini_not_configured"
     prompt = (
@@ -539,7 +598,8 @@ def generate_insight_bundle(
         "with the RM prefix and two decimal places; RM is Malaysian ringgit (MYR). Write "
         "percentage changes with the % sign, and label counts as observations, items, or "
         "states. Never leave a bare number whose unit could be unclear.\n\n"
-        f"JSON:\n{json.dumps(payload, separators=(',', ':'))}"
+        + ("For this monthly summary, focus on month-over-month direction, whether movement is broad or concentrated, and how a longer pattern affects household budgets. Use prior insights only as narrative context; current JSON metrics are authoritative. " if insight_type == "monthly_summary" else "")
+        + f"JSON:\n{json.dumps(payload, separators=(',', ':'))}"
     )
     try:
         response = _post_gemini_request(

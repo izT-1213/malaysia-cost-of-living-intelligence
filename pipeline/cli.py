@@ -19,6 +19,7 @@ from pipeline.ingestion.pricecatcher import (
 from pipeline.insights import (
     REFERENCE_BASKET_RULES,
     build_daily_insight_payload,
+    build_monthly_insight_payload,
     generate_insight_bundle,
 )
 from pipeline.storage.supabase import (
@@ -29,6 +30,7 @@ from pipeline.storage.supabase import (
     delete_premise_summaries_before,
     get_client,
     load_ai_insight,
+    load_recent_ai_insights,
     load_daily_basket_summary,
     load_item_area_summary,
     load_item_premise_summary,
@@ -215,6 +217,14 @@ def main() -> None:
         monthly_count = load_item_area_summary(
             client, monthly_current, "monthly_item_area_summary", current_result.sha256, args.batch_size
         )
+        monthly_previous = summarize_item_area(
+            enrich_observations(
+                previous,
+                pl.read_parquet(item_result.destination),
+                pl.read_parquet(premise_result.destination),
+            ),
+            period="monthly",
+        )
         premise_daily = summarize_item_premise(
             recent_window(enriched, as_of, days=PREMISE_DETAIL_WINDOW_DAYS)
         )
@@ -271,6 +281,26 @@ def main() -> None:
             },
         }
         load_ai_insight(client, as_of, insight_payload_with_status, insight_bundle["general"], insight_provider, insight_model)
+        monthly_context = load_recent_ai_insights(client, "monthly_summary", limit=5)
+        monthly_payload = build_monthly_insight_payload(
+            monthly_current,
+            monthly_previous,
+            date.fromisoformat(f"{current_result.source_month}-01"),
+            monthly_context,
+        )
+        monthly_bundle, monthly_provider, monthly_model, monthly_failure_reason = generate_insight_bundle(
+            monthly_payload, "monthly_summary"
+        )
+        monthly_payload["insight_generation"] = {
+            "provider": monthly_provider,
+            "model": monthly_model,
+            "status": "generated" if monthly_provider == "gemini" else "fallback",
+            "failure_reason": monthly_failure_reason,
+        }
+        load_ai_insight(
+            client, date.fromisoformat(f"{current_result.source_month}-01"), monthly_payload,
+            monthly_bundle["general"], monthly_provider, monthly_model, "monthly_summary"
+        )
         print(
             f"Daily summary load complete: {item_count:,} items, {premise_count:,} premises, "
             f"{daily_count:,} daily, {monthly_count:,} monthly area summaries and "

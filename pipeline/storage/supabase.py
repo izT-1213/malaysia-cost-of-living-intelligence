@@ -284,19 +284,27 @@ def load_ai_insight(
     generated_text: str,
     provider: str,
     model: str | None,
+    insight_type: str = "daily_summary",
 ) -> None:
     """Upsert one compact explanation of deterministic dashboard metrics."""
     client.table("ai_insights").upsert(
         [{
             "insight_date": insight_date.isoformat(),
-            "insight_type": "daily_summary",
+            "insight_type": insight_type,
             "analytical_payload": payload,
             "generated_text": generated_text,
             "provider": provider,
             "model": model,
         }],
-        on_conflict="insight_date",
+        on_conflict="insight_date,insight_type",
     ).execute()
+
+
+def load_recent_ai_insights(client: Client, insight_type: str, limit: int = 5) -> list[dict[str, Any]]:
+    """Read prior compact insights for continuity context."""
+    return client.table("ai_insights").select(
+        "insight_date,generated_text"
+    ).eq("insight_type", insight_type).order("insight_date", desc=True).limit(limit).execute().data or []
 
 
 def _optional_int(value: Any) -> int | None:

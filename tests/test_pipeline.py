@@ -9,6 +9,7 @@ from pipeline.insights import (
     _is_daily_quota_error,
     _parse_gemini_bundle,
     build_daily_insight_payload,
+    build_monthly_insight_payload,
     metric_snapshot_id,
 )
 from pipeline.metrics.price import median_prices, percentage_change, robust_z_scores
@@ -18,6 +19,24 @@ from pipeline.summaries.pricecatcher import summarize_item_area, summarize_item_
 from pipeline.summaries.windows import combined_source_hash, previous_month, recent_window
 from pipeline.transforms.enrich import enrich_observations
 from pipeline.transforms.pricecatcher import normalize_columns
+
+
+def test_monthly_insight_payload_carries_month_over_month_context():
+    current = pl.DataFrame({
+        "metric_month": [date(2026, 8, 1)] * 2,
+        "area_level": ["state"] * 2,
+        "state": ["Johor", "Perak"],
+        "item_code": [1, 1],
+        "median_price": [12.0, 18.0],
+    })
+    previous = current.with_columns(
+        pl.lit(date(2026, 7, 1)).alias("metric_month"),
+        pl.Series("median_price", [10.0, 20.0]),
+    )
+    payload = build_monthly_insight_payload(current, previous, date(2026, 8, 1), [{"generated_text": "Earlier context"}])
+    assert payload["monthly_reference"] == 15.0
+    assert payload["states"][0]["change_from_previous_month"] == 2.0
+    assert payload["prior_insights"][0]["generated_text"] == "Earlier context"
 
 
 def test_normalize_aliases_and_casts_types():
