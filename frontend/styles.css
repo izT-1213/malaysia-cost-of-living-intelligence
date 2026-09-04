@@ -103,8 +103,10 @@ button, select { font: inherit; }
 .basket-trend-column i { display: block; width: min(42px, 80%); min-height: 8px; border-radius: 5px 5px 0 0; background: var(--green); }
 .basket-trend-column small { color: var(--muted); font: 10px 'DM Mono'; white-space: nowrap; }
 .bar-row { display: grid; grid-template-columns: minmax(120px, 1.1fr) 3fr auto; gap: 12px; align-items: center; }
-.chart-median-line { position: absolute; top: -8px; bottom: -8px; width: 2px; background: var(--orange); opacity: .85; pointer-events: none; z-index: 2; }
-.chart-median-line span { position: absolute; top: -18px; left: 4px; color: var(--orange); font: 10px 'DM Mono'; white-space: nowrap; }
+.bar-track { position: relative; }
+.bar-median-marker { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--orange); opacity: .9; pointer-events: none; z-index: 2; }
+.chart-median-key { grid-column: 2 / 4; justify-self: end; display: flex; gap: 6px; align-items: center; color: var(--orange); font: 10px 'DM Mono'; }
+.chart-median-key i { display: inline-block; width: 16px; height: 2px; background: var(--orange); }
 .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .bar-track { height: 14px; overflow: hidden; border-radius: 4px; background: color-mix(in srgb, var(--line) 55%, transparent); }
 .bar-track i { display: block; height: 100%; border-radius: inherit; background: var(--green); }

@@ -702,10 +702,10 @@ function renderStateBasketChart(rows) {
   const sorted = [...visible].sort((a, b) => b.median - a.median || a.state.localeCompare(b.state));
   const max = Math.max(...sorted.map((row) => row.median));
   const chartMedian = roundCurrency(medianOf(sorted.map((row) => row.median)));
-  const medianPosition = 35 + (chartMedian / max) * 60;
-  chart.innerHTML = sorted.map((row) => `
-    <div class="bar-row"><span class="bar-label">${row.state}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i></div><strong>${money(row.median)}</strong></div>`).join("")
-    + `<div class="chart-median-line" style="left:${medianPosition}%" role="img" aria-label="Median of visible areas: ${money(chartMedian)}"><span>Median ${money(chartMedian)}</span></div>`;
+  const medianPosition = (chartMedian / max) * 100;
+  chart.innerHTML = `<div class="chart-median-key"><i></i><span>Median ${money(chartMedian)}</span></div>`
+    + sorted.map((row) => `
+    <div class="bar-row"><span class="bar-label">${row.state}</span><div class="bar-track"><i style="width:${(row.median / max) * 100}%"></i><b class="bar-median-marker" style="left:${medianPosition}%" aria-hidden="true"></b></div><strong>${money(row.median)}</strong></div>`).join("");
 }
 
 function basketTrendRows(period) {
