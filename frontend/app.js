@@ -9,6 +9,7 @@ const demoObservations = [
   { state: "Negeri Sembilan", item: "Eggs", median: 12.1, min: 9.5, max: 15.8 },
 ];
 const DAILY_WINDOW_DAYS = 7;
+const DAILY_LOOKBACK_DAYS = 14;
 const MONTHLY_HISTORY_MONTHS = 6;
 
 let observations = [];
@@ -95,6 +96,7 @@ let aiLoadPromise = null;
 let monthlyFallback = false;
 let monthlyDisplayDate = "";
 let dailyMetricSnapshotId = "";
+let dailyLookbackObservations = [];
 
 function insightStateRecord(state) {
   return Array.isArray(aiInsightBundle.states)
@@ -549,14 +551,18 @@ function selectedBasketRows() {
         complete: true,
       }));
   }
-  const candidates = observations.filter((row) => {
+  const dailyMode = document.querySelector("#period-filter").value === "daily";
+  const sourceObservations = dailyMode && level === "state" && dailyLookbackObservations.length
+    ? dailyLookbackObservations
+    : observations;
+  const candidates = sourceObservations.filter((row) => {
     if (row.areaLevel && row.areaLevel !== level) return false;
     if (stateFilter.value !== "all" && row.state !== stateFilter.value) return false;
     if (districtFilter.value !== "all" && row.district !== districtFilter.value) return false;
     return true;
   });
-  const windowedCandidates = document.querySelector("#period-filter").value === "daily"
-    ? latestWindowRows(candidates)
+  const windowedCandidates = dailyMode
+    ? latestWindowRows(candidates, DAILY_LOOKBACK_DAYS)
     : candidates;
   const grouped = new Map();
   windowedCandidates.forEach((row) => {
@@ -570,7 +576,18 @@ function selectedBasketRows() {
   return [...grouped.values()].map((area) => {
     const present = components.map((component) => {
       const matches = component.itemCodes.flatMap((code) => area.components.get(String(code)) || []);
-      return matches.length ? { ...component, row: medianRow(matches) } : null;
+      if (!matches.length) return null;
+      const latestAreaDate = windowedCandidates.reduce((latest, row) => row.metricDate > latest ? row.metricDate : latest, "");
+      const carryCutoff = new Date(`${latestAreaDate}T00:00:00Z`);
+      carryCutoff.setUTCDate(carryCutoff.getUTCDate() - DAILY_WINDOW_DAYS);
+      const eligibleMatches = dailyMode
+        ? matches.filter((row) => row.metricDate >= carryCutoff.toISOString().slice(0, 10))
+        : matches;
+      if (!eligibleMatches.length) return null;
+      const latestComponentDate = eligibleMatches.reduce((latest, row) => row.metricDate > latest ? row.metricDate : latest, "");
+      const latestMatches = eligibleMatches.filter((row) => row.metricDate === latestComponentDate);
+      const ageDays = Math.round((new Date(`${latestAreaDate}T00:00:00Z`) - new Date(`${latestComponentDate}T00:00:00Z`)) / 86400000);
+      return { ...component, row: medianRow(latestMatches), observedDate: latestComponentDate, ageDays };
     }).filter(Boolean);
     const values = (field) => present.reduce((sum, component) => sum + component.row[field], 0);
     const coverage = present.length / components.length;
@@ -585,8 +602,10 @@ function selectedBasketRows() {
       max: values("max"),
       coverage,
       complete: present.length === components.length,
+      carriedForwardComponents: dailyMode ? present.filter((component) => component.ageDays > 0).map((component) => component.label) : [],
+      carriedForwardDates: dailyMode ? [...new Set(present.filter((component) => component.ageDays > 0).map((component) => component.observedDate))] : [],
     };
-  }).filter((row) => row.complete);
+  }).filter((row) => row.complete || (viewFilter.value === "basket" && row.coverage > 0));
 }
 
 function selectedCustomPremiseRows() {
@@ -642,26 +661,27 @@ function latestComparableRows(rows) {
 function renderMetrics(rows) {
   const basketMode = viewFilter.value !== "item";
   const customMode = viewFilter.value === "custom";
+  const partialBasket = basketMode && !customMode && rows.some((row) => !row.complete);
   const median = basketMode
     ? roundCurrency(medianOf(rows.map((row) => row.median)))
     : rows.reduce((sum, row) => sum + row.median, 0) / rows.length;
   const min = basketMode ? Math.min(...rows.map((row) => row.median)) : Math.min(...rows.map((row) => row.min));
   const max = basketMode ? Math.max(...rows.map((row) => row.median)) : Math.max(...rows.map((row) => row.max));
-  document.querySelector("#median-label").textContent = basketMode ? (customMode ? "Custom basket cost" : "Your 10-item basket costs") : "Median item price";
-  document.querySelector("#min-label").textContent = basketMode ? "Cheapest complete basket" : "Lowest observed item";
-  document.querySelector("#max-label").textContent = basketMode ? "Most expensive complete basket" : "Highest observed item";
+  document.querySelector("#median-label").textContent = basketMode ? (customMode ? "Custom basket cost" : partialBasket ? "Observed basket components" : "Your 10-item basket costs") : "Median item price";
+  document.querySelector("#min-label").textContent = basketMode ? (partialBasket ? "Lowest observed components" : "Cheapest complete basket") : "Lowest observed item";
+  document.querySelector("#max-label").textContent = basketMode ? (partialBasket ? "Highest observed components" : "Most expensive complete basket") : "Highest observed item";
   document.querySelector("#median-value").textContent = money(median);
   document.querySelector("#min-value").textContent = money(min);
   document.querySelector("#max-value").textContent = money(max);
   const areaNames = new Set(rows.map((row) => districtFilter.value === "all" ? row.state : row.district));
   document.querySelector("#areas-value").textContent = areaNames.size;
-  document.querySelector("#areas-caption").textContent = `${districtFilter.value === "all" ? "Complete states" : "Complete districts"} compared`;
+  document.querySelector("#areas-caption").textContent = `${partialBasket ? "Areas with observations" : districtFilter.value === "all" ? "Complete states" : "Complete districts"} compared`;
   document.querySelector("#median-caption").textContent = rows.length === 1 ? (districtFilter.value === "all" ? rows[0].state : rows[0].district) : "Across selected areas";
   document.querySelector("#current-view-label").textContent = document.querySelector("#period-filter").value === "monthly"
     ? (monthlyFallback ? "Latest complete month · fallback" : "Monthly basket prices")
     : "Latest available basket prices";
   document.querySelector("#current-date-range").textContent = metricWindowLabel();
-  document.querySelector("#method-copy").textContent = `Based on complete observations from ${metricWindowLabel()}. Prices are median observed prices, not guaranteed store prices. Missing items are never treated as zero.`;
+  document.querySelector("#method-copy").textContent = `${partialBasket ? "Partial basket totals include only observed components" : "Based on complete observations"} from ${metricWindowLabel()}. Prices are median observed prices, not guaranteed store prices. Missing items are never treated as zero.`;
   const areaField = districtFilter.value === "all" ? "state" : "district";
   document.querySelector("#min-caption").textContent = rows.find((row) => (basketMode ? row.median : row.min) === min)?.[areaField] || "Selected area";
   document.querySelector("#max-caption").textContent = rows.find((row) => (basketMode ? row.median : row.max) === max)?.[areaField] || "Selected area";
@@ -672,6 +692,8 @@ function renderStateBasketChart(rows) {
   const chart = document.querySelector("#state-basket-chart");
   if (!panel || !chart) return;
   const visible = viewFilter.value !== "item" && districtFilter.value === "all" ? rows : [];
+  const partialBasket = visible.some((row) => !row.complete);
+  panel.querySelector("h2").textContent = partialBasket ? "Observed basket components by state" : "Reference basket cost by state";
   panel.hidden = !visible.length;
   if (!visible.length) {
     chart.innerHTML = "";
@@ -756,7 +778,10 @@ function renderTable(rows) {
       median: row.median,
       difference: row.median - overallMedian,
     })).sort((a, b) => a.name.localeCompare(b.name));
-    document.querySelector("#table-title").textContent = areaLabel === "state" ? "Basket cost by state" : "Basket cost by district";
+    const partialBasket = rows.some((row) => !row.complete);
+    document.querySelector("#table-title").textContent = partialBasket
+      ? (areaLabel === "state" ? "Observed components by state" : "Observed components by district")
+      : (areaLabel === "state" ? "Basket cost by state" : "Basket cost by district");
     document.querySelector("#area-column").textContent = areaLabel === "state" ? "State" : "District";
     document.querySelector("#median-column").textContent = "Basket cost";
     document.querySelector("#lowest-column").textContent = "Vs. overall median";
@@ -768,7 +793,7 @@ function renderTable(rows) {
         <th scope="row">${row.name}</th>
         <td>${money(row.median)}</td>
         <td>${row.difference === 0 ? "—" : `${row.difference > 0 ? "+" : "−"}${money(Math.abs(row.difference))}`}</td>
-        <td>${componentCount}/${componentCount}</td>
+        <td title="${row.carriedForwardDates?.length ? `Carried forward from ${row.carriedForwardDates.map(formatMetricDate).join(", ")}` : "Observed in the current window"}">${Math.round(row.coverage * componentCount)}/${componentCount}${row.complete ? "" : " observed"}${row.carriedForwardDates?.length ? " · carried" : ""}</td>
         <td>${metricWindowLabel()}</td>
       </tr>`).join("");
     return;
@@ -829,22 +854,22 @@ function render() {
     const monthlyView = document.querySelector("#period-filter").value === "monthly";
     table.innerHTML = `<tr><td colspan="5">No rows match the current filters.</td></tr>`;
     const basketMode = viewFilter.value !== "item";
-    document.querySelector("#median-label").textContent = basketMode ? (viewFilter.value === "custom" ? "Custom basket cost" : "Your 10-item basket costs") : "Median item price";
-    document.querySelector("#min-label").textContent = basketMode ? "Cheapest complete basket" : "Lowest observed item";
-    document.querySelector("#max-label").textContent = basketMode ? "Most expensive complete basket" : "Highest observed item";
+    document.querySelector("#median-label").textContent = basketMode ? (viewFilter.value === "custom" ? "Custom basket cost" : "Observed basket components") : "Median item price";
+    document.querySelector("#min-label").textContent = basketMode ? "Lowest observed components" : "Lowest observed item";
+    document.querySelector("#max-label").textContent = basketMode ? "Highest observed components" : "Highest observed item";
     document.querySelector("#median-value").textContent = "—";
     document.querySelector("#min-value").textContent = "—";
     document.querySelector("#max-value").textContent = "—";
     document.querySelector("#areas-value").textContent = "0";
     document.querySelector(".signal-number").textContent = "—";
-    document.querySelector(".insight-panel h2").textContent = unavailable ? "Live data unavailable" : basketMode ? "No complete basket yet" : "No matching observations";
+    document.querySelector(".insight-panel h2").textContent = unavailable ? "Live data unavailable" : basketMode ? "No basket observations yet" : "No matching observations";
     document.querySelector(".signal-copy").textContent = unavailable
       ? "Live data could not be loaded. Use Retry above when the service is available."
       : basketMode
-      ? "The source has observations, but no selected area has every item in this basket across the latest available seven-day window. Try Monthly view or adjust the filters."
+      ? "The source has observations, but no selected area has every item in this basket across the latest available seven-day window. Showing available components where possible."
       : "There are no observations for the selected item and area. Try another filter or period.";
     document.querySelector("#table-title").textContent = unavailable ? "Live data unavailable" : basketMode ? "Basket availability" : "No matching observations";
-    table.innerHTML = `<tr><td colspan="5">${unavailable ? "Live data is temporarily unavailable. No values are shown until it loads successfully." : dataStatus === "empty" ? "Live data is connected, but no matching observations are available for this period." : basketMode ? "Data is available, but no area has a complete reference basket in the latest available seven-day window." : "No rows match the current filters."}</td></tr>`;
+    table.innerHTML = `<tr><td colspan="5">${unavailable ? "Live data is temporarily unavailable. No values are shown until it loads successfully." : dataStatus === "empty" ? "Live data is connected, but no matching observations are available for this period." : basketMode ? "No basket components are available for the current selection." : "No rows match the current filters."}</td></tr>`;
     if (monthlyView && !unavailable) {
       document.querySelector("#current-view-label").textContent = monthlyFallback ? "Latest complete month · fallback" : "No complete monthly basket available";
       document.querySelector("#current-date-range").textContent = metricWindowLabel("monthly");
@@ -863,7 +888,7 @@ function render() {
   document.querySelector(".signal-number").textContent = money(high - low);
   document.querySelector(".insight-panel h2").textContent = basketMode ? "Basket price spread" : "Item price spread";
   document.querySelector(".signal-copy").textContent = basketMode
-    ? "Difference between the cheapest and most expensive complete baskets in the current selection."
+    ? (rows.some((row) => !row.complete) ? "Difference between observed component totals; incomplete areas are labelled by coverage." : "Difference between the cheapest and most expensive complete baskets in the current selection.")
     : "Difference between the lowest and highest observed prices in the current selection.";
 }
 
@@ -1158,7 +1183,7 @@ async function loadSupabaseData() {
   const dailyStartDate = dailyStart ? dailyStart.toISOString().slice(0, 10) : "";
   dailyDateForPremise = dailyDate || "";
   dailyStartDateForPremise = dailyStartDate;
-  const dailyDates = dailyDate ? Array.from({ length: DAILY_WINDOW_DAYS }, (_, index) => {
+  const dailyDates = dailyDate ? Array.from({ length: DAILY_LOOKBACK_DAYS }, (_, index) => {
     const value = new Date(`${dailyDate}T00:00:00Z`);
     value.setUTCDate(value.getUTCDate() - index);
     return value.toISOString().slice(0, 10);
@@ -1167,6 +1192,7 @@ async function loadSupabaseData() {
     supabaseGetAll(`daily_item_area_summary?select=metric_date,area_level,state,district,item_code,min_price,median_price,max_price&area_level=eq.state&metric_date=eq.${metricDate}&order=state.asc,item_code.asc`)
   ));
   const daily = dailyPages.flat();
+  dailyLookbackObservations = toRows(daily, itemNames);
   try {
     canonicalDailyBasketRows = dailyDate
       ? await supabaseGetAll(`daily_basket_summary?select=metric_date,state,basket_median,cross_state_reference,reference_basket_items_observed,reference_basket_items_total,reference_basket_days_observed,metric_snapshot_id&metric_date=eq.${dailyDate}&order=state.asc`)
@@ -1206,7 +1232,8 @@ async function loadSupabaseData() {
     render();
     return;
   }
-  datasets.daily = toRows([...daily, ...dailyDistricts], itemNames);
+  const dailyWindowRows = daily.filter((row) => row.metric_date >= dailyStartDate);
+  datasets.daily = toRows([...dailyWindowRows, ...dailyDistricts], itemNames);
   datasets.monthly = monthly;
   monthlyHistory = historyMonthlyRows;
   supabaseLoaded = true;

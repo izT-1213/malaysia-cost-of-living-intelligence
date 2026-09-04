@@ -16,6 +16,11 @@ window` is therefore incomplete operational coverage, not a seven-day
 observation period. Complete-item coverage and state/premise coverage are
 reported separately.
 
+For the dashboard basket only, a component may be carried forward from its
+latest known observation when it is no more than seven calendar days old. The
+source observation date and age are retained for disclosure. Older or never
+observed components remain missing; they are never converted to zero.
+
 ## Invalid and suspicious prices
 
 Null, non-positive, malformed, or unmapped records are not valid metric input;

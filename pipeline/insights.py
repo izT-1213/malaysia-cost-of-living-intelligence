@@ -75,6 +75,12 @@ def build_daily_insight_payload(
         state_rows.filter(pl.col("metric_date").is_between(window_start, latest_date, closed="both"))
         if latest_date else state_rows
     )
+    carry_window = (
+        state_rows.filter(pl.col("metric_date").is_between(
+            window_start - timedelta(days=INSIGHT_WINDOW_DAYS), latest_date, closed="both"
+        ))
+        if latest_date else state_rows
+    )
     item_stats = (
         latest.group_by("item_code")
         .agg(pl.col("median_price").median().alias("median_price"))
@@ -186,17 +192,32 @@ def build_daily_insight_payload(
             for row in payload["states"]
         ]
 
-        def basket_rows_for(frame: pl.DataFrame) -> list[dict[str, Any]]:
+        def basket_rows_for(
+            frame: pl.DataFrame,
+            reference_date=None,
+        ) -> list[dict[str, Any]]:
             rows = []
             if not frame.height:
                 return rows
+            reference_date = reference_date or frame.select(pl.col("metric_date").max()).item()
             for state in frame.get_column("state").unique().sort().to_list():
                 state_frame = frame.filter(pl.col("state") == state)
                 component_prices = {}
+                carried_forward_components = []
                 for label, codes in component_codes.items():
                     matches = state_frame.filter(pl.col("item_code").is_in(codes))
                     if matches.height:
-                        component_prices[label] = round(float(matches.get_column("median_price").median()), 2)
+                        component_date = matches.select(pl.col("metric_date").max()).item()
+                        component_prices[label] = round(float(
+                            matches.filter(pl.col("metric_date") == component_date)
+                            .get_column("median_price").median()
+                        ), 2)
+                        if component_date < reference_date:
+                            carried_forward_components.append({
+                                "component": label,
+                                "observed_date": component_date.isoformat(),
+                                "age_days": (reference_date - component_date).days,
+                            })
                 if len(component_prices) == len(REFERENCE_BASKET_RULES):
                     cheapest_component = min(component_prices.items(), key=lambda entry: (entry[1], entry[0]))
                     priciest_component = max(component_prices.items(), key=lambda entry: (entry[1], entry[0]))
@@ -207,10 +228,11 @@ def build_daily_insight_payload(
                         "lowest_component": {"item": cheapest_component[0], "median_price": cheapest_component[1]},
                         "highest_component": {"item": priciest_component[0], "median_price": priciest_component[1]},
                         **basket_coverage_by_state.get(state, {}),
+                        "carried_forward_components": carried_forward_components,
                     })
             return rows
 
-        basket_rows = basket_rows_for(latest)
+        basket_rows = basket_rows_for(carry_window, latest_date)
         if basket_rows:
             basket_reference = _median([row["basket_median"] for row in basket_rows])
             previous_rows = basket_rows_for(
@@ -503,7 +525,8 @@ def generate_insight_bundle(
         "If reference_basket_days_observed is below seven, explicitly say that the basket uses "
         "fewer than seven observed days. Always mention the observed item/day coverage when it "
         "qualifies the comparison, and do not describe a tracked-item median as a complete "
-        "basket. For the general value, inspect "
+        "basket. If carried_forward_components is non-empty, disclose that those components "
+        "use the latest known prices and are carried forward. For the general value, inspect "
         "reference_basket.complete_baskets_with_fewer_than_7_days and disclose that coverage "
         "is uneven when it is non-empty; do not imply every state has seven days of observations "
         "just because it has all basket items. Always write monetary values "

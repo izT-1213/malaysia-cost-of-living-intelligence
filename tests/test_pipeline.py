@@ -358,3 +358,33 @@ def test_daily_insight_payload_allows_no_complete_reference_basket():
     assert "reference_basket" not in payload
     assert payload["metric_contract"]["complete_state_count"] == 0
     assert payload["metric_snapshot_id"] == metric_snapshot_id(payload["metric_contract"])
+
+
+def test_daily_insight_payload_carries_forward_recent_component():
+    item_lookup = pl.DataFrame({
+        "item_code": list(range(1, 11)),
+        "item": [
+            "BERAS PREMIUM", "AYAM BERSIH", "TELUR AYAM GRED A", "MINYAK MASAK",
+            "TEPUNG GANDUM", "BAWANG BESAR", "KENTANG", "KUBIS BULAT", "TOMATO", "KANGKUNG",
+        ],
+        "unit": ["10 kg", "1kg", "30 biji", "1kg", "1kg", "1kg", "1kg", "1kg", "1kg", "1kg"],
+        "item_category": [
+            "BERAS", "AYAM", "TELUR", "MINYAK DAN LEMAK", "TEPUNG", "BAWANG",
+            "UBI KENTANG", "SAYUR-SAYURAN", "SAYUR-SAYURAN", "SAYUR-SAYURAN",
+        ],
+    })
+    rows = [
+        {"metric_date": date(2026, 8, 7), "area_level": "state", "state": "Johor", "district": "", "item_code": code, "median_price": 1.0}
+        for code in range(1, 11)
+    ] + [
+        {"metric_date": date(2026, 8, 8), "area_level": "state", "state": "Johor", "district": "", "item_code": code, "median_price": 2.0}
+        for code in range(1, 10)
+    ]
+
+    payload = build_daily_insight_payload(pl.DataFrame(rows), date(2026, 8, 8), item_lookup)
+
+    basket = payload["reference_basket"]
+    assert basket["complete_states"] == 1
+    assert basket["lowest"]["basket_median"] == 19.0
+    assert basket["lowest"]["carried_forward_components"][0]["component"] == "Kangkung"
+    assert basket["lowest"]["carried_forward_components"][0]["age_days"] == 1
