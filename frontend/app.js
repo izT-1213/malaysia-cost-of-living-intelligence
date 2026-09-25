@@ -1073,7 +1073,7 @@ async function supabaseGet(path) {
       signal: controller.signal,
     });
   } catch (error) {
-    if (error.name === "AbortError") throw new Error("Live data request timed out after 15 seconds.");
+    if (error.name === "AbortError") throw new Error("Live data request timed out after 30 seconds.");
     throw error;
   } finally {
     window.clearTimeout(timeout);
@@ -1082,7 +1082,7 @@ async function supabaseGet(path) {
   return response.json();
 }
 
-async function supabaseGetAll(path, pageSize = 1000) {
+async function supabaseGetAll(path, pageSize = 5000) {
   const rows = [];
   let offset = 0;
   while (true) {
@@ -1309,7 +1309,7 @@ async function loadPremiseData(itemCodes) {
 function startDataLoad() {
   if (loadPromise) return loadPromise;
   activeLoadController = new AbortController();
-  const loadTimeout = window.setTimeout(() => activeLoadController?.abort(), 20000);
+  const loadTimeout = window.setTimeout(() => activeLoadController?.abort(), 60000);
   setDataStatus("loading", "Loading the latest available data from Supabase…");
   render();
   loadPromise = loadSupabaseData().catch((error) => {
