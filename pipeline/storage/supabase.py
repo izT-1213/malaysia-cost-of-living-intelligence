@@ -112,26 +112,11 @@ def delete_daily_basket_summaries_before(client: Client, cutoff: date) -> None:
 
 
 def cleanup_daily_tables_before(client: Client, cutoff: date) -> None:
-    """Delete old daily rows one calendar date at a time to avoid timeouts."""
-    for table, column in (
-        ("daily_item_area_summary", "metric_date"),
-        ("daily_item_premise_summary", "metric_date"),
-        ("daily_basket_summary", "metric_date"),
-        ("price_observations", "observed_date"),
-    ):
-        while True:
-            result = (
-                client.table(table)
-                .select(column)
-                .lt(column, cutoff.isoformat())
-                .order(column, desc=False)
-                .limit(1)
-                .execute()
-            )
-            rows = getattr(result, "data", None) or []
-            if not rows or not rows[0].get(column):
-                break
-            client.table(table).delete().eq(column, rows[0][column]).execute()
+    """Delete old daily rows through the bounded-batch database cleanup RPC."""
+    client.rpc(
+        "cleanup_daily_tables_before",
+        {"p_cutoff": cutoff.isoformat(), "p_batch_size": 5_000},
+    ).execute()
 
 
 def load_item_area_summary(
